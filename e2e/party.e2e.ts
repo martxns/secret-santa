@@ -230,9 +230,9 @@ test('full party lifecycle', async ({ browser }) => {
 	// --- language switch
 	await admin.goto(partyUrl);
 	await admin.getByRole('button', { name: /^Language/ }).click();
-	await admin.getByRole('menuitemradio', { name: 'Polski' }).click();
-	await expect(admin.getByRole('heading', { name: 'Regulamin' })).toBeVisible();
-	await expect(admin.getByText('Nie kupujemy: alcohol.')).toBeVisible();
+	await admin.getByRole('menuitemradio', { name: 'Lietuvių' }).click();
+	await expect(admin.getByRole('heading', { name: 'Nuostatai' })).toBeVisible();
+	await expect(admin.getByText('Nepirkite: alcohol.')).toBeVisible();
 });
 
 test('site admin sees all parties', async ({ page }) => {

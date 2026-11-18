@@ -18,8 +18,8 @@ before larger changes; append to the log when you finish a chunk of work.
   mutations. Remote functions exist but are not used.
 - Drizzle ORM + better-sqlite3. Migrations in `drizzle/`, applied on boot in
   `src/lib/server/db/index.ts`. After editing `schema.ts`: `npm run db:generate`.
-- Paraglide JS 2: **edit `scripts/messages.py`** (key → (en, pl)) and run
-  `python3 scripts/messages.py` to regenerate `messages/{en,pl}.json`. Compiled output in
+- Paraglide JS 2: **edit `scripts/messages.py`** (key → (en, lt)) and run
+  `python3 scripts/messages.py` to regenerate `messages/{en,lt}.json`. Compiled output in
   `src/lib/paraglide` (gitignored; `npx @inlang/paraglide-js compile --project ./project.inlang
 --outdir ./src/lib/paraglide` if svelte-check complains before a dev/build run).
   Use `import { m } from '#lib/paraglide/messages.js'`. Form-action errors return a key `x`
@@ -53,7 +53,7 @@ before larger changes; append to the log when you finish a chunk of work.
 - **Repo is public: never commit the owner's domain, IPs or other infra details.** Use
   placeholders (`santa.example.com`, `<server-lan-ip>`); real values stay in the local `.env`.
 
-- All user-facing text goes through Paraglide (pl + en).
+- All user-facing text goes through Paraglide (en + lt).
 - Never expose assignments to admins in the UI.
 - Wishlists in admin views are obscured until "Reveal" is clicked; the own wishlist on `/me`
   stays hidden behind "Reveal & edit" (open only when empty).

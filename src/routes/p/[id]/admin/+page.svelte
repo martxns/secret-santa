@@ -3,7 +3,8 @@
 	import type { SubmitFunction } from '$app/forms';
 	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { getLocale, locales, type Locale } from '#lib/paraglide/runtime.js';
+	import { LANGUAGES } from '#lib/languages.ts';
 	import { TIMEZONE } from '$app/env/public';
 	import { errorText } from '#lib/errors.ts';
 	import { displayName, fullName } from '#lib/names.ts';
@@ -73,12 +74,21 @@
 		nickname: string;
 		phone: string;
 		magicToken: string | null;
+		locale: string | null;
 	}) {
 		const url = memberMagicUrl(member.magicToken);
+		const memberLocale =
+			member.locale && (locales as readonly string[]).includes(member.locale)
+				? (member.locale as Locale)
+				: getLocale();
+		const fallbackTemplate = m.sms_template_default(
+			{ name: '{name}', party: '{party}', link: '{link}' },
+			{ locale: memberLocale }
+		);
 		const body = renderSmsMessage(
 			smsTemplateDraft,
 			{ name: displayName(member), party: party.name, link: url },
-			defaultSmsTemplate
+			fallbackTemplate
 		);
 		return buildSmsHref(member.phone, body);
 	}
@@ -280,13 +290,11 @@
 				</form>
 			{/if}
 		</div>
-
 		{#if data.admin.magicLinksEnabled}
 			<p class="mt-2 text-xs text-ink-soft">🔒 {m.magic_link_private_note()}</p>
 		{:else}
 			<p class="mt-2 text-xs text-ink-soft">{m.magic_links_disabled_note()}</p>
 		{/if}
-
 		<ul class="mt-4 divide-y divide-ink/10">
 			{#each data.members as member (member.id)}
 				<li class="space-y-3 py-4">
@@ -301,6 +309,9 @@
 									{#if !member.hasPasscode}<span class="text-berry">🔓 {m.no_passcode_short()}</span
 										>{/if}
 									{#if member.phone}<span class="tabular-nums">📞 {member.phone}</span>{/if}
+									{#if member.locale && member.locale in LANGUAGES}
+										<span>🌐 {LANGUAGES[member.locale as Locale].name}</span>
+									{/if}
 								</p>
 							</div>
 						</div>
@@ -326,15 +337,25 @@
 									name="phone"
 									type="tel"
 									autocomplete="tel"
-									class="input py-1.5 text-sm sm:w-48"
+									class="input py-1.5 text-sm sm:w-44"
 									maxlength="40"
 									placeholder={m.phone_ph()}
 									aria-label={m.phone_number()}
 									value={member.phone}
 								/>
+								<select
+									name="locale"
+									class="input py-1.5 text-sm sm:w-36"
+									value={member.locale ?? ''}
+									aria-label={m.member_locale()}
+								>
+									<option value="">{m.member_locale_auto()}</option>
+									{#each locales as loc (loc)}
+										<option value={loc}>{LANGUAGES[loc].name}</option>
+									{/each}
+								</select>
 								<button class="btn-ghost shrink-0 btn-sm">{m.save()}</button>
 							</form>
-
 							<div class="flex flex-wrap items-center gap-2">
 								{#if member.magicToken}
 									<CopyButton text={memberMagicUrl(member.magicToken)} label={m.copy()} />
@@ -446,10 +467,16 @@
 						aria-label={m.phone_number()}
 						maxlength="40"
 					/>
+					<select name="locale" class="input" aria-label={m.member_locale()}>
+						<option value="">{m.member_locale()}: {m.member_locale_auto()}</option>
+						{#each locales as loc (loc)}
+							<option value={loc}>{m.member_locale()}: {LANGUAGES[loc].name}</option>
+						{/each}
+					</select>
 					<input
 						name="passcode"
 						type="password"
-						class="input sm:col-span-2"
+						class="input"
 						placeholder={m.passcode() + ' (' + m.optional() + ')'}
 						aria-label={m.passcode()}
 						autocomplete="new-password"

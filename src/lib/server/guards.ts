@@ -1,5 +1,12 @@
 import { error, redirect, type RequestEvent } from '@sveltejs/kit';
-import { getSessionMember, hasCodeAccess, isSiteAdmin, loginMember } from './auth.ts';
+import { locales } from '#lib/paraglide/runtime.js';
+import {
+	getSessionMember,
+	hasCodeAccess,
+	isSiteAdmin,
+	loginMember,
+	setLocaleCookie
+} from './auth.ts';
 import { getMemberByMagicToken, getParty, runDraw } from './party.ts';
 import type { Member, Party } from './db/schema.ts';
 
@@ -22,6 +29,9 @@ export function partyContext(event: RequestEvent): PartyContext {
 			if (hit && hit.party.magicLinksEnabled) {
 				event.setHeaders({ 'cache-control': 'no-store' });
 				loginMember(event.cookies, hit.member);
+				if (hit.member.locale && (locales as readonly string[]).includes(hit.member.locale)) {
+					setLocaleCookie(event.cookies, hit.member.locale);
+				}
 				redirect(303, `/p/${hit.party.id}`);
 			}
 		}
@@ -79,13 +89,14 @@ export function publicMember(m: Member) {
 }
 export type PublicMember = ReturnType<typeof publicMember>;
 
-/** Fields safe only for party/site admins (includes wishlist, phone, and private magic link token). */
+/** Fields safe only for party/site admins (includes wishlist, phone, locale, and private magic link token). */
 export function adminMember(m: Member) {
 	return {
 		...publicMember(m),
 		wishlist: m.wishlist,
 		phone: m.phone,
-		magicToken: m.magicToken
+		magicToken: m.magicToken,
+		locale: m.locale
 	};
 }
 

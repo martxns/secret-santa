@@ -17,8 +17,8 @@ export type Language = {
  * entry here and a flag SVG in `static/flags/`.
  */
 export const LANGUAGES: Record<Locale, Language> = {
-	pl: { name: 'Polski', flag: '/flags/pl.svg', intl: 'pl-PL', quotes: ['„', '”'] },
-	en: { name: 'English', flag: '/flags/gb.svg', intl: 'en-GB', quotes: ['“', '”'] }
+	en: { name: 'English', flag: '/flags/gb.svg', intl: 'en-GB', quotes: ['“', '”'] },
+	lt: { name: 'Lietuvių', flag: '/flags/lt.svg', intl: 'lt-LT', quotes: ['„', '“'] }
 };
 
 export const language = (locale: string = getLocale()): Language =>

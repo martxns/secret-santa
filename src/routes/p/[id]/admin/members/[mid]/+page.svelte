@@ -3,6 +3,8 @@
 	import type { SubmitFunction } from '$app/forms';
 	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale, locales, type Locale } from '#lib/paraglide/runtime.js';
+	import { LANGUAGES } from '#lib/languages.ts';
 	import { errorText } from '#lib/errors.ts';
 	import { displayName, fullName } from '#lib/names.ts';
 	import { buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
@@ -12,13 +14,16 @@
 
 	let { data, form }: PageProps = $props();
 	const member = $derived(data.member);
-
 	let showWishlist = $state(false);
 	// svelte-ignore state_referenced_locally
 	let wish = $state(data.member.wishlist);
-
 	const magicUrl = $derived(
 		member.magicToken ? `${page.url.origin}/p/${member.magicToken}` : ''
+	);
+	const memberLocale = $derived(
+		member.locale && (locales as readonly string[]).includes(member.locale)
+			? (member.locale as Locale)
+			: getLocale()
 	);
 	const smsHref = $derived(
 		magicUrl
@@ -27,11 +32,10 @@
 					renderSmsMessage(
 						data.smsTemplate,
 						{ name: displayName(member), party: data.party.name, link: magicUrl },
-						m.sms_template_default({
-							name: '{name}',
-							party: '{party}',
-							link: '{link}'
-						})
+						m.sms_template_default(
+							{ name: '{name}', party: '{party}', link: '{link}' },
+							{ locale: memberLocale }
+						)
 					)
 				)
 			: ''
@@ -126,6 +130,17 @@
 						value={member.phone}
 					/>
 				</div>
+			</div>
+
+			<div>
+				<label class="label" for="locale">🌐 {m.member_locale()}</label>
+				<select id="locale" name="locale" class="input" value={member.locale ?? ''}>
+					<option value="">{m.member_locale_auto()}</option>
+					{#each locales as loc (loc)}
+						<option value={loc}>{LANGUAGES[loc].name}</option>
+					{/each}
+				</select>
+				<p class="mt-1 text-xs text-ink-soft">{m.member_locale_help()}</p>
 			</div>
 
 			<div>

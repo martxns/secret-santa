@@ -20,7 +20,13 @@
 	}
 	function choose(locale: Locale) {
 		close();
-		if (locale !== current) setLocale(locale);
+		if (locale !== current) {
+			setLocale(locale, { reload: false });
+			const attrs =
+				location.protocol === 'https:' ? 'path=/; samesite=none; secure' : 'path=/; samesite=lax';
+			document.cookie = `PARAGLIDE_LOCALE=${locale}; ${attrs}; max-age=34560000`;
+			location.reload();
+		}
 	}
 	function onMenuKey(e: KeyboardEvent) {
 		const list = items();

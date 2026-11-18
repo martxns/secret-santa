@@ -2,7 +2,7 @@
 
 **Self-hosted Secret Santa for families and friend groups — psst… don't tell anyone.**
 Create a party, invite everyone with a code, write the rules together and let the draw do its
-magic. Polish 🇵🇱 and English 🇬🇧 — more languages can be added (see below).
+magic. Lithuanian 🇱🇹 and English 🇬🇧 — more languages can be added (see below).
 
 ![Party page with a big countdown and a phone showing the unwrapped draw](docs/screenshots/hero.webp)
 
@@ -59,7 +59,9 @@ After dark — follows the device, or pick light/dark with the switch in the hea
   don't spoil their own surprise. Archive / restore, delete. Nobody can see the assignments.
 - **Personal magic links (optional)** — enable `MAGIC_LINKS_ENABLED=true` in `.env` (for new parties) or
   toggle **Personal magic links** in Party admin → Settings. Organisers can add members up front, import
-  phone numbers from iOS Contacts (`.vcf` export, Contact Picker, or pasted list), generate 192-bit
+  phone numbers from iOS Contacts (`.vcf` export, Contact Picker, or pasted list), assign each member's
+  preferred website language (English or Lithuanian) so their link opens the site in that language
+  automatically (while still allowing them to switch via the header menu), generate 192-bit
   unguessable per-member links (`/p/<token>`), regenerate/revoke links, and launch pre-filled SMS
   messages with a customisable template.
   > **Privacy note:** Each personal magic link signs the recipient directly into their participant
@@ -112,7 +114,7 @@ PW_BASE_URL=http://localhost:8976 PW_ADMIN_PASSWORD=… npx playwright test   # 
 ```
 
 UI strings live in `scripts/messages.py` → `python3 scripts/messages.py` regenerates
-`messages/{en,pl}.json`. After changing `src/lib/server/db/schema.ts` run `npm run db:generate`.
+`messages/{en,lt}.json`. After changing `src/lib/server/db/schema.ts` run `npm run db:generate`.
 
 ### Adding a language
 

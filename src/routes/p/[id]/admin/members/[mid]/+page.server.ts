@@ -6,6 +6,7 @@ import { adminMember, formString, requireAdmin } from '#lib/server/guards.ts';
 import {
 	clearAvatar,
 	generateMemberMagicToken,
+	normalizeMemberLocale,
 	readNames,
 	revokeMemberMagicToken,
 	saveAvatar,
@@ -62,9 +63,11 @@ export const actions: Actions = {
 
 		const wishlist = formString(data, 'wishlist', 4000);
 		const phone = normalizePhone(formString(data, 'phone', 40));
+		const locale = normalizeMemberLocale(data.get('locale'));
 		const update: Partial<typeof schema.members.$inferInsert> = {
 			...names,
 			phone,
+			locale,
 			wishlist,
 			wishlistChangedAt: wishlistChanged(party, member.wishlist, wishlist),
 			isAdmin,

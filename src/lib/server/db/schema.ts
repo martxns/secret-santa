@@ -51,6 +51,7 @@ export const members = sqliteTable(
 		wishlistChangedAt: ts('wishlist_changed_at'),
 		phone: text('phone').notNull().default(''),
 		magicToken: text('magic_token').unique(),
+		locale: text('locale'),
 		createdAt: ts('created_at')
 			.notNull()
 			.$defaultFn(() => new Date())

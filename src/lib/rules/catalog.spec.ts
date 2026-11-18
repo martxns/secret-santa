@@ -6,7 +6,7 @@ const ctx = { currency: 'PLN', tz: 'Europe/Warsaw' };
 const sentence = (n: string) => ruleSentence({ type: 'gift_count', value: { n } }, ctx);
 
 describe('gift_count rule', () => {
-	afterEach(() => overwriteGetLocale(() => 'pl'));
+	afterEach(() => overwriteGetLocale(() => 'en'));
 
 	it('says gifts go to the one drawn person (en)', () => {
 		overwriteGetLocale(() => 'en');
@@ -14,12 +14,14 @@ describe('gift_count rule', () => {
 		expect(sentence('3')).toBe('Everyone prepares 3 gifts for the one person they drew.');
 	});
 
-	it('uses Polish plural forms', () => {
-		overwriteGetLocale(() => 'pl');
-		expect(sentence('1')).toBe('Każdy przygotowuje 1 prezent dla jednej wylosowanej osoby.');
-		expect(sentence('3')).toBe('Każdy przygotowuje 3 prezenty dla jednej wylosowanej osoby.');
-		expect(sentence('5')).toBe('Każdy przygotowuje 5 prezentów dla jednej wylosowanej osoby.');
-		expect(sentence('22')).toBe('Każdy przygotowuje 22 prezenty dla jednej wylosowanej osoby.');
+	it('uses Lithuanian plural forms', () => {
+		overwriteGetLocale(() => 'lt');
+		expect(sentence('1')).toBe('Kiekvienas paruošia 1 dovaną tam vienam ištrauktam žmogui.');
+		expect(sentence('3')).toBe('Kiekvienas paruošia 3 dovanas tam vienam ištrauktam žmogui.');
+		expect(sentence('5')).toBe('Kiekvienas paruošia 5 dovanas tam vienam ištrauktam žmogui.');
+		expect(sentence('10')).toBe('Kiekvienas paruošia 10 dovanų tam vienam ištrauktam žmogui.');
+		expect(sentence('21')).toBe('Kiekvienas paruošia 21 dovaną tam vienam ištrauktam žmogui.');
+		expect(sentence('22')).toBe('Kiekvienas paruošia 22 dovanas tam vienam ištrauktam žmogui.');
 	});
 });
 

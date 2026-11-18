@@ -20,6 +20,17 @@ export const memberCookie = (partyId: string) => `ss_m_${partyId}`;
 export const codeCookie = (partyId: string) => `ss_c_${partyId}`;
 const ADMIN_COOKIE = 'ss_admin';
 
+/** Sets Paraglide's locale cookie while respecting COOKIE_SECURE (non-httpOnly so client LangSwitch can still override). */
+export function setLocaleCookie(cookies: Cookies, locale: string) {
+	cookies.set('PARAGLIDE_LOCALE', locale, {
+		path: '/',
+		httpOnly: false,
+		sameSite: (COOKIE_SECURE ? 'none' : 'lax') as 'none' | 'lax',
+		secure: COOKIE_SECURE,
+		maxAge: 34_560_000
+	});
+}
+
 /* ---------- hashing ---------- */
 
 export const hashSecret = (secret: string) => hash(secret);

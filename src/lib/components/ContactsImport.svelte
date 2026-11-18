@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
+	import { locales } from '#lib/paraglide/runtime.js';
+	import { LANGUAGES } from '#lib/languages.ts';
 	import { displayName, fullName } from '#lib/names.ts';
 	import { normalizePhone, parseContactText, parseVcf, type ParsedContact } from '#lib/contacts.ts';
 
@@ -16,6 +18,7 @@
 		key: string;
 		selected: boolean;
 		targetMemberId: string; // '' = create new member
+		locale: string;
 	};
 
 	let {
@@ -32,6 +35,7 @@
 	let pasteText = $state('');
 	let staged = $state<StagedContact[]>([]);
 	let generateLinks = $state(true);
+	let defaultLocale = $state('');
 	let parseTouched = $state(false);
 	let pickerError = $state('');
 
@@ -74,7 +78,8 @@
 				...c,
 				key: `${sig}:${staged.length + additions.length}`,
 				selected: !drawn || !!matchedId,
-				targetMemberId: matchedId || (drawn && members[0] ? members[0].id : '')
+				targetMemberId: matchedId || (drawn && members[0] ? members[0].id : ''),
+				locale: defaultLocale
 			});
 		}
 		staged = [...staged, ...additions];
@@ -146,6 +151,7 @@
 					lastName: s.lastName,
 					nickname: s.nickname,
 					phone: s.phone,
+					locale: s.locale || null,
 					generateLink: magicLinksEnabled && generateLinks
 				}))
 		)
@@ -232,27 +238,59 @@
 								<span class="block font-mono text-xs text-ink-soft tabular-nums">{item.phone}</span>
 							</span>
 						</label>
-						<select
-							class="input py-1.5 text-sm sm:w-64"
-							bind:value={item.targetMemberId}
-							aria-label={m.contacts_action_new()}
-						>
-							{#if !drawn}
-								<option value="">➕ {m.contacts_action_new()}</option>
-							{/if}
-							{#each members as mem (mem.id)}
-								<option value={mem.id}>{m.contacts_action_assign({ name: fullName(mem) })}</option>
-							{/each}
-						</select>
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+							<select
+								class="input py-1.5 text-sm sm:w-56"
+								bind:value={item.targetMemberId}
+								aria-label={m.contacts_action_new()}
+							>
+								{#if !drawn}
+									<option value="">➕ {m.contacts_action_new()}</option>
+								{/if}
+								{#each members as mem (mem.id)}
+									<option value={mem.id}>
+										{m.contacts_action_assign({ name: fullName(mem) })}
+									</option>
+								{/each}
+							</select>
+							<select
+								class="input py-1.5 text-sm sm:w-36"
+								bind:value={item.locale}
+								aria-label={m.member_locale()}
+							>
+								<option value="">{m.member_locale_auto()}</option>
+								{#each locales as loc (loc)}
+									<option value={loc}>{LANGUAGES[loc].name}</option>
+								{/each}
+							</select>
+						</div>
 					</li>
 				{/each}
 			</ul>
 
 			{#if magicLinksEnabled}
-				<label class="flex items-center gap-2.5 text-sm">
-					<input type="checkbox" class="h-4 w-4 rounded text-pine" bind:checked={generateLinks} />
-					<span>{m.contacts_generate_links_opt()}</span>
-				</label>
+				<div class="flex flex-wrap items-center gap-4">
+					<label class="flex items-center gap-2.5 text-sm">
+						<input type="checkbox" class="h-4 w-4 rounded text-pine" bind:checked={generateLinks} />
+						<span>{m.contacts_generate_links_opt()}</span>
+					</label>
+					<label class="flex items-center gap-2 text-sm">
+						<span class="text-ink-soft">{m.contacts_default_locale()}:</span>
+						<select
+							class="input py-1 text-sm"
+							value={defaultLocale}
+							onchange={(e) => {
+								defaultLocale = e.currentTarget.value;
+								staged = staged.map((s) => ({ ...s, locale: defaultLocale }));
+							}}
+						>
+							<option value="">{m.member_locale_auto()}</option>
+							{#each locales as loc (loc)}
+								<option value={loc}>{LANGUAGES[loc].name}</option>
+							{/each}
+						</select>
+					</label>
+				</div>
 			{/if}
 
 			<div class="flex flex-wrap gap-2">

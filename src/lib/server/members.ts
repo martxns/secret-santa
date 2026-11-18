@@ -8,7 +8,13 @@ import { revokeMemberSessions } from './auth.ts';
 import { getMembers, removeAvatarFile, uploadsDir } from './party.ts';
 import { displayName } from '#lib/names.ts';
 import { normalizePhone } from '#lib/contacts.ts';
+import { locales, type Locale } from '#lib/paraglide/runtime.js';
 import { formString } from './guards.ts';
+
+export function normalizeMemberLocale(raw: unknown): Locale | null {
+	const val = String(raw ?? '').trim();
+	return (locales as readonly string[]).includes(val) ? (val as Locale) : null;
+}
 
 export type NameFields = { firstName: string; lastName: string; nickname: string };
 
@@ -54,6 +60,7 @@ export function createMember(
 		participates?: boolean;
 		phone?: string;
 		magicToken?: string | null;
+		locale?: string | null;
 	}
 ) {
 	const id = newId();
@@ -68,7 +75,8 @@ export function createMember(
 			isAdmin: values.isAdmin ?? false,
 			participates: values.participates ?? true,
 			phone: normalizePhone(values.phone ?? ''),
-			magicToken: values.magicToken ?? null
+			magicToken: values.magicToken ?? null,
+			locale: normalizeMemberLocale(values.locale)
 		})
 		.run();
 	return db.select().from(schema.members).where(eq(schema.members.id, id)).get()!;
@@ -77,6 +85,13 @@ export function createMember(
 export function setMemberPhone(memberId: string, phone: string) {
 	db.update(schema.members)
 		.set({ phone: normalizePhone(phone) })
+		.where(eq(schema.members.id, memberId))
+		.run();
+}
+
+export function setMemberLocale(memberId: string, locale: string | null) {
+	db.update(schema.members)
+		.set({ locale: normalizeMemberLocale(locale) })
 		.where(eq(schema.members.id, memberId))
 		.run();
 }

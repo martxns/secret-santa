@@ -27,8 +27,10 @@ import {
 	createMember,
 	generateMemberMagicToken,
 	generateMissingMagicTokens,
+	normalizeMemberLocale,
 	readNames,
 	revokeMemberMagicToken,
+	setMemberLocale,
 	setMemberPhone,
 	validateNames,
 	validatePasscode
@@ -84,6 +86,7 @@ type ContactImportEntry = {
 	lastName?: unknown;
 	nickname?: unknown;
 	phone?: unknown;
+	locale?: unknown;
 	generateLink?: unknown;
 };
 
@@ -93,7 +96,6 @@ export const actions: Actions = {
 		const data = await event.request.formData();
 		const name = formString(data, 'name', 120);
 		if (!name) return bad('settings', 'party_name_required');
-
 		const drawAt = fromInputValue(formString(data, 'drawAt', 16), TIMEZONE);
 		if (
 			!party.drawnAt &&
@@ -102,7 +104,6 @@ export const actions: Actions = {
 			drawAt.getTime() !== party.drawAt?.getTime()
 		)
 			return bad('settings', 'draw_in_past');
-
 		const currencyRaw = formString(data, 'currency', 3).toUpperCase();
 		db.update(schema.parties)
 			.set({
@@ -197,10 +198,12 @@ export const actions: Actions = {
 		const passErr = validatePasscode(pass, pass, false);
 		if (passErr) return bad('members', passErr);
 		const phone = formString(data, 'phone', 40);
+		const locale = normalizeMemberLocale(data.get('locale'));
 		const generateLink = party.magicLinksEnabled && data.get('generateLink') === 'on';
 		createMember(party.id, {
 			...names,
 			phone,
+			locale,
 			passcodeHash: pass ? await hashSecret(pass) : null,
 			magicToken: generateLink ? newMagicToken() : null
 		});
@@ -213,6 +216,17 @@ export const actions: Actions = {
 		const member = partyMember(party.id, String(data.get('memberId') ?? ''));
 		if (!member) return bad('members', 'not_found', 404);
 		setMemberPhone(member.id, formString(data, 'phone', 40));
+		if (data.has('locale')) {
+			setMemberLocale(member.id, normalizeMemberLocale(data.get('locale')));
+		}
+		return ok('members');
+	},
+	setLocale: async (event) => {
+		const { party } = requireAdmin(event);
+		const data = await event.request.formData();
+		const member = partyMember(party.id, String(data.get('memberId') ?? ''));
+		if (!member) return bad('members', 'not_found', 404);
+		setMemberLocale(member.id, normalizeMemberLocale(data.get('locale')));
 		return ok('members');
 	},
 	generateLink: async (event) => {
@@ -242,10 +256,7 @@ export const actions: Actions = {
 		const { party } = requireAdmin(event);
 		const data = await event.request.formData();
 		const smsTemplate = data.get('reset') === '1' ? '' : formString(data, 'smsTemplate', 1000);
-		db.update(schema.parties)
-			.set({ smsTemplate })
-			.where(eq(schema.parties.id, party.id))
-			.run();
+		db.update(schema.parties).set({ smsTemplate }).where(eq(schema.parties.id, party.id)).run();
 		return ok('sms');
 	},
 	importContacts: async (event) => {
@@ -265,12 +276,14 @@ export const actions: Actions = {
 
 		for (const item of entries) {
 			const phone = normalizePhone(String(item.phone ?? ''));
+			const locale = normalizeMemberLocale(item.locale);
 			const generateLink = party.magicLinksEnabled && item.generateLink === true;
 
 			if (item.mode === 'assign') {
 				const member = partyMember(party.id, String(item.memberId ?? ''));
 				if (!member) continue;
 				setMemberPhone(member.id, phone);
+				if (locale) setMemberLocale(member.id, locale);
 				if (generateLink && !member.magicToken) {
 					generateMemberMagicToken(member.id, false);
 				}
@@ -278,15 +291,22 @@ export const actions: Actions = {
 			} else if (item.mode === 'create') {
 				if (party.drawnAt) return bad('contacts', 'locked');
 				const names = {
-					firstName: String(item.firstName ?? '').trim().slice(0, 60),
-					lastName: String(item.lastName ?? '').trim().slice(0, 60),
-					nickname: String(item.nickname ?? '').trim().slice(0, 60)
+					firstName: String(item.firstName ?? '')
+						.trim()
+						.slice(0, 60),
+					lastName: String(item.lastName ?? '')
+						.trim()
+						.slice(0, 60),
+					nickname: String(item.nickname ?? '')
+						.trim()
+						.slice(0, 60)
 				};
 				const nameErr = validateNames(names, party.id);
 				if (nameErr) return bad('contacts', nameErr);
 				createMember(party.id, {
 					...names,
 					phone,
+					locale,
 					passcodeHash: null,
 					magicToken: generateLink ? newMagicToken() : null
 				});
@@ -306,8 +326,7 @@ export const actions: Actions = {
 		const b = String(data.get('b') ?? '');
 		const ids = new Set(getMembers(party.id).map((x) => x.id));
 		if (!ids.has(a) || !ids.has(b) || a === b) return bad('exclusions', 'pick_member');
-		if (activeExclusionsFor(party.id, [a, b]).length)
-			return bad('exclusions', 'exclusion_exists');
+		if (activeExclusionsFor(party.id, [a, b]).length) return bad('exclusions', 'exclusion_exists');
 		db.insert(schema.exclusions)
 			.values({ id: newId(), partyId: party.id, requesterId: a, targetId: b, status: 'accepted' })
 			.run();

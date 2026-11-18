@@ -49,7 +49,8 @@ using `src/lib/time.ts` (no date library).
 
 ## Locale
 
-Paraglide strategy: cookie → preferred language → base locale (`pl`). No URL prefixes.
+Paraglide strategy: cookie → preferred language → base locale (`en`), supporting English (`en`)
+and Lithuanian (`lt`). No URL prefixes.
 
 ## Home-screen app opens full screen
 
@@ -116,8 +117,10 @@ The own-profile editor starts open only when the wishlist is empty.
   Only admins receive `phone` and `magicToken` (via `adminMember` in `requireAdmin` routes);
   `publicMember` never exposes them.
 - Opening `/p/<token>` validates `magic_links_enabled`, sets `Cache-Control: no-store`, creates a
-  normal `ss_m_<partyId>` session (without setting `ss_c_<partyId>`), and redirects `303` to
-  `/p/<partyId>` so the secret token is stripped from the browser URL bar.
+  normal `ss_m_<partyId>` session (without setting `ss_c_<partyId>`), applies the member's
+  assigned `locale` to the non-httpOnly `PARAGLIDE_LOCALE` cookie when set (allowing them to switch
+  languages later via the header menu), and redirects `303` to `/p/<partyId>` so the secret token
+  is stripped from the browser URL bar.
 - Regenerating or revoking a link updates/clears `members.magic_token` and calls
   `revokeMemberSessions(memberId)` so any unintended recipient loses access immediately.
 - **Privacy:** A magic link grants direct access to that participant's profile and Secret Santa
