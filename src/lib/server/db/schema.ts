@@ -25,6 +25,8 @@ export const parties = sqliteTable('parties', {
 	/** drawAt / partyAt value the 24 h reminder push was sent for (re-sent when the date changes). */
 	drawReminderFor: ts('draw_reminder_for'),
 	partyReminderFor: ts('party_reminder_for'),
+	magicLinksEnabled: bool('magic_links_enabled').notNull().default(false),
+	smsTemplate: text('sms_template').notNull().default(''),
 	createdAt: ts('created_at')
 		.notNull()
 		.$defaultFn(() => new Date())
@@ -47,6 +49,8 @@ export const members = sqliteTable(
 		participates: bool('participates').notNull().default(true),
 		/** Set when the wishlist changes after the draw; the giver is notified once it settles. */
 		wishlistChangedAt: ts('wishlist_changed_at'),
+		phone: text('phone').notNull().default(''),
+		magicToken: text('magic_token').unique(),
 		createdAt: ts('created_at')
 			.notNull()
 			.$defaultFn(() => new Date())

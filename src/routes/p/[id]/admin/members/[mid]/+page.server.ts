@@ -2,15 +2,18 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '#lib/server/db/index.ts';
 import { hashSecret, revokeMemberSessions } from '#lib/server/auth.ts';
-import { formString, publicMember, requireAdmin } from '#lib/server/guards.ts';
+import { adminMember, formString, requireAdmin } from '#lib/server/guards.ts';
 import {
 	clearAvatar,
+	generateMemberMagicToken,
 	readNames,
+	revokeMemberMagicToken,
 	saveAvatar,
 	validateNames,
 	validatePasscode
 } from '#lib/server/members.ts';
 import { deleteMember, getMembers, touchDraw } from '#lib/server/party.ts';
+import { normalizePhone } from '#lib/contacts.ts';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { wishlistChanged } from '#lib/server/notifications.ts';
@@ -27,8 +30,12 @@ function target(event: RequestEvent) {
 }
 
 export const load: PageServerLoad = (event) => {
-	const { member } = target(event);
-	return { member: { ...publicMember(member), wishlist: member.wishlist } };
+	const { party, member } = target(event);
+	return {
+		member: adminMember(member),
+		magicLinksEnabled: party.magicLinksEnabled,
+		smsTemplate: party.smsTemplate
+	};
 };
 
 export const actions: Actions = {
@@ -54,8 +61,10 @@ export const actions: Actions = {
 		}
 
 		const wishlist = formString(data, 'wishlist', 4000);
+		const phone = normalizePhone(formString(data, 'phone', 40));
 		const update: Partial<typeof schema.members.$inferInsert> = {
 			...names,
+			phone,
 			wishlist,
 			wishlistChangedAt: wishlistChanged(party, member.wishlist, wishlist),
 			isAdmin,
@@ -63,9 +72,21 @@ export const actions: Actions = {
 		};
 		if (pass) update.passcodeHash = await hashSecret(pass);
 		if (removePass) update.passcodeHash = null;
+
 		db.update(schema.members).set(update).where(eq(schema.members.id, member.id)).run();
 		if ((pass || removePass) && member.id !== me?.id) revokeMemberSessions(member.id);
 		if (participates !== member.participates) touchDraw(party.id);
+		return { ok: true };
+	},
+	generateLink: (event) => {
+		const { party, member } = target(event);
+		if (!party.magicLinksEnabled) return fail(400, { error: 'forbidden' });
+		generateMemberMagicToken(member.id);
+		return { ok: true };
+	},
+	revokeLink: (event) => {
+		const { member } = target(event);
+		revokeMemberMagicToken(member.id);
 		return { ok: true };
 	},
 	avatar: async (event) => {

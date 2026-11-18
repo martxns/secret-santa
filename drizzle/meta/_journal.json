@@ -15,6 +15,13 @@
       "when": 1794422079597,
       "tag": "0001_push",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795003758332,
+      "tag": "0002_magic_links",
+      "breakpoints": true
     }
   ]
 }

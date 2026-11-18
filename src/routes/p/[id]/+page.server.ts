@@ -8,12 +8,14 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = (event) => {
 	const { party, me, access } = partyContext(event);
-	if (!access) return { rules: [], members: [], assignment: null };
+	if (!access) return { rules: [], members: [], assignment: null, hasWishlist: false };
+
 	const receiver = me && party.drawnAt ? getAssignment(party.id, me.id) : null;
 	return {
 		rules: getRules(party.id),
 		members: getMembers(party.id).map(publicMember),
 		assignment: receiver ? { ...publicMember(receiver), wishlist: receiver.wishlist } : null,
+		hasWishlist: !!me?.wishlist.trim(),
 		created: event.url.searchParams.has('created'),
 		pushOn: me ? subscribedEndpoints(me.id).length > 0 : false
 	};

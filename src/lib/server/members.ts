@@ -1,11 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { and, eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from './db/index.ts';
-import { newId } from './ids.ts';
+import { newId, newMagicToken } from './ids.ts';
+import { revokeMemberSessions } from './auth.ts';
 import { getMembers, removeAvatarFile, uploadsDir } from './party.ts';
 import { displayName } from '#lib/names.ts';
+import { normalizePhone } from '#lib/contacts.ts';
 import { formString } from './guards.ts';
 
 export type NameFields = { firstName: string; lastName: string; nickname: string };
@@ -46,19 +48,74 @@ export function validatePasscode(
 
 export function createMember(
 	partyId: string,
-	values: NameFields & { passcodeHash: string | null; isAdmin?: boolean; participates?: boolean }
+	values: NameFields & {
+		passcodeHash: string | null;
+		isAdmin?: boolean;
+		participates?: boolean;
+		phone?: string;
+		magicToken?: string | null;
+	}
 ) {
 	const id = newId();
 	db.insert(schema.members)
 		.values({
 			id,
 			partyId,
-			...values,
+			firstName: values.firstName,
+			lastName: values.lastName,
+			nickname: values.nickname,
+			passcodeHash: values.passcodeHash,
 			isAdmin: values.isAdmin ?? false,
-			participates: values.participates ?? true
+			participates: values.participates ?? true,
+			phone: normalizePhone(values.phone ?? ''),
+			magicToken: values.magicToken ?? null
 		})
 		.run();
 	return db.select().from(schema.members).where(eq(schema.members.id, id)).get()!;
+}
+
+export function setMemberPhone(memberId: string, phone: string) {
+	db.update(schema.members)
+		.set({ phone: normalizePhone(phone) })
+		.where(eq(schema.members.id, memberId))
+		.run();
+}
+
+export function generateMemberMagicToken(memberId: string, revokeExistingSessions = true): string {
+	const existing = db
+		.select({ magicToken: schema.members.magicToken })
+		.from(schema.members)
+		.where(eq(schema.members.id, memberId))
+		.get();
+	const token = newMagicToken();
+	db.update(schema.members).set({ magicToken: token }).where(eq(schema.members.id, memberId)).run();
+	if (revokeExistingSessions && existing?.magicToken) {
+		revokeMemberSessions(memberId);
+	}
+	return token;
+}
+
+export function generateMissingMagicTokens(partyId: string): number {
+	const missing = db
+		.select({ id: schema.members.id })
+		.from(schema.members)
+		.where(and(eq(schema.members.partyId, partyId), isNull(schema.members.magicToken)))
+		.all();
+	if (!missing.length) return 0;
+	db.transaction((tx) => {
+		for (const m of missing) {
+			tx.update(schema.members)
+				.set({ magicToken: newMagicToken() })
+				.where(eq(schema.members.id, m.id))
+				.run();
+		}
+	});
+	return missing.length;
+}
+
+export function revokeMemberMagicToken(memberId: string) {
+	db.update(schema.members).set({ magicToken: null }).where(eq(schema.members.id, memberId)).run();
+	revokeMemberSessions(memberId);
 }
 
 export const MAX_AVATAR_BYTES = 10 * 1024 * 1024;

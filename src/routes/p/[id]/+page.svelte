@@ -13,6 +13,7 @@
 
 	let { data, form }: PageProps = $props();
 	const party = $derived(data.party);
+
 	let now = $state(Date.now());
 	$effect(() => {
 		const t = setInterval(() => (now = Date.now()), 15_000);
@@ -64,6 +65,9 @@
 		{#if !party.archivedAt}
 			<div class="flex flex-wrap items-center gap-2">
 				<AddToCalendar {party} />
+				{#if data.me && !data.hasWishlist && !party.drawnAt}
+					<a href="/p/{party.id}/me" class="btn-primary btn-sm">🎁 {m.cta_write_wishlist()}</a>
+				{/if}
 				{#if data.me && !data.pushOn && !party.drawnAt}
 					<a href="/p/{party.id}/me#notifications" class="btn-ghost btn-sm">🔔 {m.push_nudge()}</a>
 				{/if}

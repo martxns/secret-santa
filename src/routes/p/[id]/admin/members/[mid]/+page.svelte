@@ -1,21 +1,52 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '$app/forms';
+	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
 	import { errorText } from '#lib/errors.ts';
-	import { fullName } from '#lib/names.ts';
+	import { displayName, fullName } from '#lib/names.ts';
+	import { buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import CopyButton from '#lib/components/CopyButton.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 	const member = $derived(data.member);
+
 	let showWishlist = $state(false);
 	// svelte-ignore state_referenced_locally
 	let wish = $state(data.member.wishlist);
+
+	const magicUrl = $derived(
+		member.magicToken ? `${page.url.origin}/p/${member.magicToken}` : ''
+	);
+	const smsHref = $derived(
+		magicUrl
+			? buildSmsHref(
+					member.phone,
+					renderSmsMessage(
+						data.smsTemplate,
+						{ name: displayName(member), party: data.party.name, link: magicUrl },
+						m.sms_template_default({
+							name: '{name}',
+							party: '{party}',
+							link: '{link}'
+						})
+					)
+				)
+			: ''
+	);
+
 	const keep: SubmitFunction =
 		() =>
 		async ({ update }) =>
 			update({ reset: false });
+	const confirmThen =
+		(question: string): SubmitFunction =>
+		({ cancel }) => {
+			if (!confirm(question)) cancel();
+			return async ({ update }) => update({ reset: false });
+		};
 </script>
 
 <a href="/p/{data.party.id}/admin" class="text-sm font-semibold text-ink-soft hover:text-ink"
@@ -31,6 +62,7 @@
 				<h1 class="text-3xl font-black text-pine">{fullName(member)}</h1>
 			</div>
 		</div>
+
 		<form
 			method="POST"
 			action="?/avatar"
@@ -76,9 +108,24 @@
 					/>
 				</div>
 			</div>
-			<div>
-				<label class="label" for="nickname">{m.nickname()}</label>
-				<input id="nickname" name="nickname" class="input" maxlength="60" value={member.nickname} />
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="label" for="nickname">{m.nickname()}</label>
+					<input id="nickname" name="nickname" class="input" maxlength="60" value={member.nickname} />
+				</div>
+				<div>
+					<label class="label" for="phone">{m.phone_number()}</label>
+					<input
+						id="phone"
+						name="phone"
+						type="tel"
+						autocomplete="tel"
+						class="input"
+						maxlength="40"
+						placeholder={m.phone_ph()}
+						value={member.phone}
+					/>
+				</div>
 			</div>
 
 			<div>
@@ -152,6 +199,45 @@
 			{#if form?.ok}<p class="success" role="status">✓ {m.saved()}</p>{/if}
 		</form>
 	</section>
+
+	{#if data.magicLinksEnabled}
+		<section class="card space-y-3">
+			<h2 class="text-2xl font-bold text-pine">🔗 {m.magic_link_label()}</h2>
+			<p class="text-xs text-ink-soft">{m.magic_link_private_note()}</p>
+			{#if magicUrl}
+				<input
+					class="input font-mono text-xs"
+					readonly
+					value={magicUrl}
+					aria-label={m.magic_link_label()}
+					onfocus={(e) => e.currentTarget.select()}
+				/>
+				<div class="flex flex-wrap gap-2">
+					<CopyButton text={magicUrl} label={m.copy()} />
+					<a href={smsHref} class="btn-pine btn-sm">💬 {m.sms_send()}</a>
+					<form
+						method="POST"
+						action="?/generateLink"
+						use:enhance={confirmThen(m.confirm_regenerate_link())}
+					>
+						<button class="btn-ghost btn-sm">🎲 {m.magic_link_regenerate()}</button>
+					</form>
+					<form
+						method="POST"
+						action="?/revokeLink"
+						use:enhance={confirmThen(m.confirm_revoke_link())}
+					>
+						<button class="btn-danger btn-sm">{m.magic_link_revoke()}</button>
+					</form>
+				</div>
+			{:else}
+				<p class="text-sm text-ink-soft">{m.magic_link_none()}</p>
+				<form method="POST" action="?/generateLink" use:enhance={keep}>
+					<button class="btn-pine btn-sm">🔗 {m.magic_link_generate()}</button>
+				</form>
+			{/if}
+		</section>
+	{/if}
 
 	<form
 		method="POST"

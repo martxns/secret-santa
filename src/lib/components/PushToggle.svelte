@@ -68,6 +68,9 @@
 				status = Notification.permission === 'denied' ? 'denied' : 'off';
 				return;
 			}
+			if (!(await navigator.serviceWorker.getRegistration())) {
+				await navigator.serviceWorker.register('/service-worker.js', { type: 'module' });
+			}
 			const reg = await navigator.serviceWorker.ready;
 			const sub =
 				(await reg.pushManager.getSubscription()) ??
@@ -131,9 +134,9 @@
 			<p class="font-semibold text-pine">✓ {m.push_on()}</p>
 			<div class="mt-3 flex flex-wrap gap-2">
 				<button class="btn-ghost btn-sm" disabled={busy} onclick={test}>{m.push_test()}</button>
-				<button class="btn-ghost btn-sm" disabled={busy} onclick={disable}
-					>{m.push_disable()}</button
-				>
+				<button class="btn-ghost btn-sm" disabled={busy} onclick={disable}>
+					{m.push_disable()}
+				</button>
 			</div>
 		{/if}
 		{#if note}<p class="mt-3 text-sm text-ink-soft" role="status">{note}</p>{/if}

@@ -3,8 +3,14 @@ import { and, eq } from 'drizzle-orm';
 import { TIMEZONE } from '$app/env/public';
 import { db, schema } from '#lib/server/db/index.ts';
 import { hashSecret } from '#lib/server/auth.ts';
-import { formString, publicMember, requireAdmin } from '#lib/server/guards.ts';
-import { cleanCustomCode, generatePartyCode, newId, normalizeCode } from '#lib/server/ids.ts';
+import { adminMember, formString, publicMember, requireAdmin } from '#lib/server/guards.ts';
+import {
+	cleanCustomCode,
+	generatePartyCode,
+	newId,
+	newMagicToken,
+	normalizeCode
+} from '#lib/server/ids.ts';
 import {
 	codeTaken,
 	deleteParty,
@@ -19,12 +25,17 @@ import {
 import {
 	activeExclusionsFor,
 	createMember,
+	generateMemberMagicToken,
+	generateMissingMagicTokens,
 	readNames,
+	revokeMemberMagicToken,
+	setMemberPhone,
 	validateNames,
 	validatePasscode
 } from '#lib/server/members.ts';
 import { sanitizeRules } from '#lib/rules/catalog.ts';
 import { CURRENCIES } from '#lib/currencies.ts';
+import { normalizePhone } from '#lib/contacts.ts';
 import { fromInputValue } from '#lib/time.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -33,9 +44,14 @@ export const load: PageServerLoad = (event) => {
 	const members = getMembers(party.id);
 	const byId = new Map(members.map((x) => [x.id, publicMember(x)]));
 	return {
-		admin: { code: party.code, drawError: party.drawError },
+		admin: {
+			code: party.code,
+			drawError: party.drawError,
+			magicLinksEnabled: party.magicLinksEnabled,
+			smsTemplate: party.smsTemplate
+		},
 		rules: getRules(party.id),
-		members: members.map((x) => ({ ...publicMember(x), wishlist: x.wishlist })),
+		members: members.map(adminMember),
 		exclusions: getExclusions(party.id)
 			.filter((e) => e.status !== 'declined')
 			.map((e) => ({
@@ -47,8 +63,29 @@ export const load: PageServerLoad = (event) => {
 	};
 };
 
-const ok = (section: string) => ({ ok: section });
+const ok = (section: string, extra?: Record<string, unknown>) => ({ ok: section, ...extra });
 const bad = (section: string, error: string, status = 400) => fail(status, { section, error });
+
+function partyMember(partyId: string, memberId: string) {
+	if (!memberId) return null;
+	return (
+		db
+			.select()
+			.from(schema.members)
+			.where(and(eq(schema.members.id, memberId), eq(schema.members.partyId, partyId)))
+			.get() ?? null
+	);
+}
+
+type ContactImportEntry = {
+	mode?: unknown;
+	memberId?: unknown;
+	firstName?: unknown;
+	lastName?: unknown;
+	nickname?: unknown;
+	phone?: unknown;
+	generateLink?: unknown;
+};
 
 export const actions: Actions = {
 	settings: async (event) => {
@@ -56,6 +93,7 @@ export const actions: Actions = {
 		const data = await event.request.formData();
 		const name = formString(data, 'name', 120);
 		if (!name) return bad('settings', 'party_name_required');
+
 		const drawAt = fromInputValue(formString(data, 'drawAt', 16), TIMEZONE);
 		if (
 			!party.drawnAt &&
@@ -64,6 +102,7 @@ export const actions: Actions = {
 			drawAt.getTime() !== party.drawAt?.getTime()
 		)
 			return bad('settings', 'draw_in_past');
+
 		const currencyRaw = formString(data, 'currency', 3).toUpperCase();
 		db.update(schema.parties)
 			.set({
@@ -73,6 +112,7 @@ export const actions: Actions = {
 				partyAt: fromInputValue(formString(data, 'partyAt', 16), TIMEZONE),
 				drawAt: party.drawnAt ? party.drawAt : drawAt,
 				isPublic: data.get('isPublic') === 'on',
+				magicLinksEnabled: data.get('magicLinksEnabled') === 'on',
 				currency: CURRENCIES.includes(currencyRaw) ? currencyRaw : party.currency
 			})
 			.where(eq(schema.parties.id, party.id))
@@ -156,9 +196,107 @@ export const actions: Actions = {
 		const pass = String(data.get('passcode') ?? '');
 		const passErr = validatePasscode(pass, pass, false);
 		if (passErr) return bad('members', passErr);
-		createMember(party.id, { ...names, passcodeHash: pass ? await hashSecret(pass) : null });
+		const phone = formString(data, 'phone', 40);
+		const generateLink = party.magicLinksEnabled && data.get('generateLink') === 'on';
+		createMember(party.id, {
+			...names,
+			phone,
+			passcodeHash: pass ? await hashSecret(pass) : null,
+			magicToken: generateLink ? newMagicToken() : null
+		});
 		touchDraw(party.id);
 		return ok('members');
+	},
+	setPhone: async (event) => {
+		const { party } = requireAdmin(event);
+		const data = await event.request.formData();
+		const member = partyMember(party.id, String(data.get('memberId') ?? ''));
+		if (!member) return bad('members', 'not_found', 404);
+		setMemberPhone(member.id, formString(data, 'phone', 40));
+		return ok('members');
+	},
+	generateLink: async (event) => {
+		const { party } = requireAdmin(event);
+		if (!party.magicLinksEnabled) return bad('members', 'forbidden', 403);
+		const data = await event.request.formData();
+		const member = partyMember(party.id, String(data.get('memberId') ?? ''));
+		if (!member) return bad('members', 'not_found', 404);
+		generateMemberMagicToken(member.id);
+		return ok('members');
+	},
+	generateAllLinks: (event) => {
+		const { party } = requireAdmin(event);
+		if (!party.magicLinksEnabled) return bad('members', 'forbidden', 403);
+		generateMissingMagicTokens(party.id);
+		return ok('members');
+	},
+	revokeLink: async (event) => {
+		const { party } = requireAdmin(event);
+		const data = await event.request.formData();
+		const member = partyMember(party.id, String(data.get('memberId') ?? ''));
+		if (!member) return bad('members', 'not_found', 404);
+		revokeMemberMagicToken(member.id);
+		return ok('members');
+	},
+	smsTemplate: async (event) => {
+		const { party } = requireAdmin(event);
+		const data = await event.request.formData();
+		const smsTemplate = data.get('reset') === '1' ? '' : formString(data, 'smsTemplate', 1000);
+		db.update(schema.parties)
+			.set({ smsTemplate })
+			.where(eq(schema.parties.id, party.id))
+			.run();
+		return ok('sms');
+	},
+	importContacts: async (event) => {
+		const { party } = requireAdmin(event);
+		const data = await event.request.formData();
+		let entries: ContactImportEntry[];
+		try {
+			const parsed = JSON.parse(String(data.get('contacts') ?? '[]'));
+			if (!Array.isArray(parsed)) return bad('contacts', 'invalid');
+			entries = parsed.slice(0, 200);
+		} catch {
+			return bad('contacts', 'invalid');
+		}
+
+		let importedCount = 0;
+		let createdAny = false;
+
+		for (const item of entries) {
+			const phone = normalizePhone(String(item.phone ?? ''));
+			const generateLink = party.magicLinksEnabled && item.generateLink === true;
+
+			if (item.mode === 'assign') {
+				const member = partyMember(party.id, String(item.memberId ?? ''));
+				if (!member) continue;
+				setMemberPhone(member.id, phone);
+				if (generateLink && !member.magicToken) {
+					generateMemberMagicToken(member.id, false);
+				}
+				importedCount++;
+			} else if (item.mode === 'create') {
+				if (party.drawnAt) return bad('contacts', 'locked');
+				const names = {
+					firstName: String(item.firstName ?? '').trim().slice(0, 60),
+					lastName: String(item.lastName ?? '').trim().slice(0, 60),
+					nickname: String(item.nickname ?? '').trim().slice(0, 60)
+				};
+				const nameErr = validateNames(names, party.id);
+				if (nameErr) return bad('contacts', nameErr);
+				createMember(party.id, {
+					...names,
+					phone,
+					passcodeHash: null,
+					magicToken: generateLink ? newMagicToken() : null
+				});
+				createdAny = true;
+				importedCount++;
+			}
+		}
+
+		if (createdAny) touchDraw(party.id);
+		return ok('contacts', { importedCount });
 	},
 	addExclusion: async (event) => {
 		const { party } = requireAdmin(event);
@@ -168,7 +306,8 @@ export const actions: Actions = {
 		const b = String(data.get('b') ?? '');
 		const ids = new Set(getMembers(party.id).map((x) => x.id));
 		if (!ids.has(a) || !ids.has(b) || a === b) return bad('exclusions', 'pick_member');
-		if (activeExclusionsFor(party.id, [a, b]).length) return bad('exclusions', 'exclusion_exists');
+		if (activeExclusionsFor(party.id, [a, b]).length)
+			return bad('exclusions', 'exclusion_exists');
 		db.insert(schema.exclusions)
 			.values({ id: newId(), partyId: party.id, requesterId: a, targetId: b, status: 'accepted' })
 			.run();

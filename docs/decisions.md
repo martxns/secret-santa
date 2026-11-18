@@ -106,3 +106,20 @@ Wishlists are a surprise for the giver, and phones get read over shoulders. Ever
 show someone's wishlist outside the reveal card hides it behind a button: admin lists
 (`Obscured`), the admin member editor, and the member's own profile (`/me`, "Reveal & edit").
 The own-profile editor starts open only when the wishlist is empty.
+
+## Per-member magic links (optional)
+
+- Disabled by default (`MAGIC_LINKS_ENABLED=false`) so the party-code flow stays the default.
+  Can be enabled globally for new parties via `MAGIC_LINKS_ENABLED=true` and toggled per party in
+  Party admin → Settings (`parties.magic_links_enabled`).
+- Tokens are 192-bit `randomBytes(24).toString('base64url')` stored on `members.magic_token`.
+  Only admins receive `phone` and `magicToken` (via `adminMember` in `requireAdmin` routes);
+  `publicMember` never exposes them.
+- Opening `/p/<token>` validates `magic_links_enabled`, sets `Cache-Control: no-store`, creates a
+  normal `ss_m_<partyId>` session (without setting `ss_c_<partyId>`), and redirects `303` to
+  `/p/<partyId>` so the secret token is stripped from the browser URL bar.
+- Regenerating or revoking a link updates/clears `members.magic_token` and calls
+  `revokeMemberSessions(memberId)` so any unintended recipient loses access immediately.
+- **Privacy:** A magic link grants direct access to that participant's profile and Secret Santa
+  assignment. Organisers must treat each link as private and send it individually (e.g. via the
+  built-in `sms:` launcher).

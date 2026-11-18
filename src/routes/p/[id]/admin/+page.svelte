@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '$app/forms';
+	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { TIMEZONE } from '$app/env/public';
@@ -8,7 +9,9 @@
 	import { displayName, fullName } from '#lib/names.ts';
 	import { formatDateTime, toInputValue } from '#lib/time.ts';
 	import { CURRENCIES } from '#lib/currencies.ts';
+	import { buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
 	import CopyButton from '#lib/components/CopyButton.svelte';
+	import ContactsImport from '#lib/components/ContactsImport.svelte';
 	import type { RuleEntry } from '#lib/rules/catalog.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import Obscured from '#lib/components/Obscured.svelte';
@@ -17,6 +20,7 @@
 
 	let { data, form }: PageProps = $props();
 	const party = $derived(data.party);
+
 	let rules = $state<RuleEntry[]>([]);
 	$effect.pre(() => {
 		rules = structuredClone($state.snapshot(data.rules));
@@ -24,6 +28,11 @@
 	let currency = $state('PLN');
 	$effect.pre(() => {
 		currency = party.currency;
+	});
+	// svelte-ignore state_referenced_locally
+	let smsTemplateDraft = $state(data.admin.smsTemplate);
+	$effect.pre(() => {
+		smsTemplateDraft = data.admin.smsTemplate;
 	});
 
 	const keep: SubmitFunction =
@@ -36,19 +45,72 @@
 			if (!confirm(question)) cancel();
 			return async ({ update }) => update({ reset: false });
 		};
+
 	const msg = (section: string) =>
 		form && 'section' in form && form.section === section
 			? { error: form.error as string }
 			: form && 'ok' in form && form.ok === section
-				? { ok: true }
+				? {
+						ok: true,
+						importedCount:
+							'importedCount' in form ? (form.importedCount as number) : undefined
+					}
 				: null;
+
 	const participants = $derived(data.members.filter((x) => x.participates).length);
+	const missingLinks = $derived(data.members.some((x) => !x.magicToken));
+	const defaultSmsTemplate = $derived(
+		m.sms_template_default({ name: '{name}', party: '{party}', link: '{link}' })
+	);
+
+	function memberMagicUrl(token: string | null) {
+		return token ? `${page.url.origin}/p/${token}` : '';
+	}
+
+	function memberSmsHref(member: {
+		firstName: string;
+		lastName: string;
+		nickname: string;
+		phone: string;
+		magicToken: string | null;
+	}) {
+		const url = memberMagicUrl(member.magicToken);
+		const body = renderSmsMessage(
+			smsTemplateDraft,
+			{ name: displayName(member), party: party.name, link: url },
+			defaultSmsTemplate
+		);
+		return buildSmsHref(member.phone, body);
+	}
+
+	const smsPreviewText = $derived.by(() => {
+		const sample = data.members[0] ?? {
+			firstName: 'Anna',
+			lastName: '',
+			nickname: '',
+			magicToken: 'example-token'
+		};
+		const link = sample.magicToken
+			? `${page.url.origin}/p/${sample.magicToken}`
+			: `${page.url.origin}/p/example-token`;
+		return renderSmsMessage(
+			smsTemplateDraft,
+			{ name: displayName(sample), party: party.name, link },
+			defaultSmsTemplate
+		);
+	});
 </script>
 
 {#snippet feedback(section: string)}
 	{@const f = msg(section)}
 	{#if f?.error}<p class="mt-3 error" role="alert">{errorText(f.error)}</p>{/if}
-	{#if f?.ok}<p class="mt-3 success" role="status">✓ {m.saved()}</p>{/if}
+	{#if f?.ok}
+		<p class="mt-3 success" role="status">
+			✓ {f.importedCount !== undefined
+				? m.contacts_imported_ok({ count: String(f.importedCount) })
+				: m.saved()}
+		</p>
+	{/if}
 {/snippet}
 
 <h1 class="text-4xl font-black text-pine">{m.admin_title()}</h1>
@@ -151,6 +213,18 @@
 					<span class="text-sm font-semibold">{m.party_public()}</span>
 				</label>
 			</div>
+			<label class="flex items-start gap-3 rounded-2xl bg-paper-2/60 p-3">
+				<input
+					type="checkbox"
+					name="magicLinksEnabled"
+					class="mt-0.5 h-5 w-5 rounded text-pine"
+					checked={data.admin.magicLinksEnabled}
+				/>
+				<span class="text-sm">
+					<span class="block font-semibold">🔗 {m.magic_links_toggle()}</span>
+					<span class="mt-0.5 block text-xs text-ink-soft">{m.magic_links_help()}</span>
+				</span>
+			</label>
 			<button class="btn-pine">{m.save()}</button>
 			{@render feedback('settings')}
 		</form>
@@ -196,32 +270,146 @@
 
 	<!-- members -->
 	<section class="card lg:col-span-2">
-		<h2 class="text-2xl font-bold text-pine">
-			👥 {m.members_title({ count: String(data.members.length) })}
-		</h2>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h2 class="text-2xl font-bold text-pine">
+				👥 {m.members_title({ count: String(data.members.length) })}
+			</h2>
+			{#if data.admin.magicLinksEnabled && missingLinks && data.members.length}
+				<form method="POST" action="?/generateAllLinks" use:enhance={keep}>
+					<button class="btn-pine btn-sm">🔗 {m.magic_link_generate_all()}</button>
+				</form>
+			{/if}
+		</div>
+
+		{#if data.admin.magicLinksEnabled}
+			<p class="mt-2 text-xs text-ink-soft">🔒 {m.magic_link_private_note()}</p>
+		{:else}
+			<p class="mt-2 text-xs text-ink-soft">{m.magic_links_disabled_note()}</p>
+		{/if}
+
 		<ul class="mt-4 divide-y divide-ink/10">
 			{#each data.members as member (member.id)}
-				<li class="grid gap-3 py-4 sm:grid-cols-[minmax(0,14rem)_1fr_auto] sm:items-start">
-					<div class="flex items-center gap-3">
-						<Avatar {member} size={44} />
-						<div class="min-w-0">
-							<p class="truncate font-semibold">{fullName(member)}</p>
-							<p class="flex flex-wrap gap-1.5 text-xs text-ink-soft">
-								{#if member.isAdmin}<span>👑 {m.party_admin()}</span>{/if}
-								{#if !member.participates}<span>{m.spectator()}</span>{/if}
-								{#if !member.hasPasscode}<span class="text-berry">🔓 {m.no_passcode_short()}</span
-									>{/if}
-							</p>
+				<li class="space-y-3 py-4">
+					<div class="grid gap-3 sm:grid-cols-[minmax(0,14rem)_1fr_auto] sm:items-start">
+						<div class="flex items-center gap-3">
+							<Avatar {member} size={44} />
+							<div class="min-w-0">
+								<p class="truncate font-semibold">{fullName(member)}</p>
+								<p class="flex flex-wrap gap-1.5 text-xs text-ink-soft">
+									{#if member.isAdmin}<span>👑 {m.party_admin()}</span>{/if}
+									{#if !member.participates}<span>{m.spectator()}</span>{/if}
+									{#if !member.hasPasscode}<span class="text-berry">🔓 {m.no_passcode_short()}</span
+										>{/if}
+									{#if member.phone}<span class="tabular-nums">📞 {member.phone}</span>{/if}
+								</p>
+							</div>
 						</div>
+						<Obscured text={member.wishlist} />
+						<a
+							href="/p/{party.id}/admin/members/{member.id}"
+							class="btn-ghost justify-self-start btn-sm">✏️ {m.edit()}</a
+						>
 					</div>
-					<Obscured text={member.wishlist} />
-					<a
-						href="/p/{party.id}/admin/members/{member.id}"
-						class="btn-ghost justify-self-start btn-sm">✏️ {m.edit()}</a
-					>
+
+					{#if data.admin.magicLinksEnabled}
+						<div
+							class="flex flex-col gap-2 rounded-2xl bg-paper-2/45 p-3 lg:flex-row lg:items-center lg:justify-between"
+						>
+							<form
+								method="POST"
+								action="?/setPhone"
+								class="flex flex-wrap items-center gap-2 sm:flex-nowrap"
+								use:enhance={keep}
+							>
+								<input type="hidden" name="memberId" value={member.id} />
+								<input
+									name="phone"
+									type="tel"
+									autocomplete="tel"
+									class="input py-1.5 text-sm sm:w-48"
+									maxlength="40"
+									placeholder={m.phone_ph()}
+									aria-label={m.phone_number()}
+									value={member.phone}
+								/>
+								<button class="btn-ghost shrink-0 btn-sm">{m.save()}</button>
+							</form>
+
+							<div class="flex flex-wrap items-center gap-2">
+								{#if member.magicToken}
+									<CopyButton text={memberMagicUrl(member.magicToken)} label={m.copy()} />
+									<a href={memberSmsHref(member)} class="btn-pine btn-sm">💬 {m.sms_send()}</a>
+									<form
+										method="POST"
+										action="?/generateLink"
+										use:enhance={confirmThen(m.confirm_regenerate_link())}
+									>
+										<input type="hidden" name="memberId" value={member.id} />
+										<button class="btn-ghost btn-sm">🎲 {m.magic_link_regenerate()}</button>
+									</form>
+									<form
+										method="POST"
+										action="?/revokeLink"
+										use:enhance={confirmThen(m.confirm_revoke_link())}
+									>
+										<input type="hidden" name="memberId" value={member.id} />
+										<button class="btn-danger btn-sm">{m.magic_link_revoke()}</button>
+									</form>
+								{:else}
+									<form method="POST" action="?/generateLink" use:enhance={keep}>
+										<input type="hidden" name="memberId" value={member.id} />
+										<button class="btn-pine btn-sm">🔗 {m.magic_link_generate()}</button>
+									</form>
+								{/if}
+							</div>
+						</div>
+					{/if}
 				</li>
 			{/each}
 		</ul>
+
+		{#if data.admin.magicLinksEnabled}
+			<ContactsImport
+				members={data.members}
+				drawn={!!party.drawnAt}
+				magicLinksEnabled={data.admin.magicLinksEnabled}
+			/>
+			{@render feedback('contacts')}
+
+			<details class="mt-4 rounded-2xl bg-paper-2/50 p-4">
+				<summary class="cursor-pointer font-semibold">💬 {m.sms_template_title()}</summary>
+				<p class="mt-2 text-xs text-ink-soft">
+					{m.sms_template_help({ name: '{name}', party: '{party}', link: '{link}' })}
+				</p>
+				<form method="POST" action="?/smsTemplate" class="mt-3 space-y-3" use:enhance={keep}>
+					<textarea
+						name="smsTemplate"
+						rows="3"
+						maxlength="1000"
+						class="input text-sm"
+						placeholder={defaultSmsTemplate}
+						aria-label={m.sms_template_title()}
+						bind:value={smsTemplateDraft}
+					></textarea>
+					<div class="rounded-xl bg-snow/80 p-3 text-xs text-ink-soft">
+						<span class="font-semibold text-ink">{m.sms_preview()}:</span>
+						<p class="mt-1 break-all whitespace-pre-wrap">{smsPreviewText}</p>
+					</div>
+					<div class="flex flex-wrap gap-2">
+						<button class="btn-pine btn-sm">{m.save()}</button>
+						<button
+							class="btn-ghost btn-sm"
+							name="reset"
+							value="1"
+							onclick={() => (smsTemplateDraft = '')}
+						>
+							{m.sms_template_reset()}
+						</button>
+					</div>
+					{@render feedback('sms')}
+				</form>
+			</details>
+		{/if}
 
 		{#if !party.drawnAt}
 			<details class="mt-4 rounded-2xl bg-paper-2/50 p-4">
@@ -250,13 +438,33 @@
 						maxlength="60"
 					/>
 					<input
+						name="phone"
+						type="tel"
+						autocomplete="tel"
+						class="input"
+						placeholder="{m.phone_number()} ({m.optional()})"
+						aria-label={m.phone_number()}
+						maxlength="40"
+					/>
+					<input
 						name="passcode"
 						type="password"
-						class="input"
+						class="input sm:col-span-2"
 						placeholder={m.passcode() + ' (' + m.optional() + ')'}
 						aria-label={m.passcode()}
 						autocomplete="new-password"
 					/>
+					{#if data.admin.magicLinksEnabled}
+						<label class="flex items-center gap-2.5 text-sm sm:col-span-2">
+							<input
+								type="checkbox"
+								name="generateLink"
+								class="h-4 w-4 rounded text-pine"
+								checked
+							/>
+							<span>{m.magic_link_auto_opt()}</span>
+						</label>
+					{/if}
 					<button class="btn-pine sm:col-span-2 sm:justify-self-start">{m.add_member()}</button>
 				</form>
 			</details>

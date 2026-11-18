@@ -24,5 +24,10 @@ export const variables = defineEnvVars({
 		description: 'IANA timezone used to display and enter dates.',
 		public: true,
 		schema: optional('Europe/Warsaw')
+	},
+	MAGIC_LINKS_ENABLED: {
+		description:
+			'Set to "true" to enable invite-code-free per-member magic links by default on new parties.',
+		schema: (value) => value === 'true'
 	}
 });

@@ -1,4 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
+import { MAGIC_LINKS_ENABLED } from '$app/env/private';
 import { TIMEZONE } from '$app/env/public';
 import { db, schema } from '#lib/server/db/index.ts';
 import { grantCodeAccess, hashSecret, loginMember } from '#lib/server/auth.ts';
@@ -61,6 +62,7 @@ export const actions: Actions = {
 				description: formString(data, 'description', 2000),
 				location: formString(data, 'location', 300),
 				isPublic: data.get('isPublic') === 'on',
+				magicLinksEnabled: MAGIC_LINKS_ENABLED,
 				partyAt,
 				drawAt,
 				currency
@@ -70,6 +72,7 @@ export const actions: Actions = {
 
 		const nameErr = validateNames(names, partyId);
 		if (nameErr) return err(3, nameErr);
+
 		const admin = createMember(partyId, {
 			...names,
 			passcodeHash: await hashSecret(password),

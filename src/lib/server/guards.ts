@@ -1,6 +1,6 @@
 import { error, redirect, type RequestEvent } from '@sveltejs/kit';
-import { getSessionMember, hasCodeAccess, isSiteAdmin } from './auth.ts';
-import { getParty, runDraw } from './party.ts';
+import { getSessionMember, hasCodeAccess, isSiteAdmin, loginMember } from './auth.ts';
+import { getMemberByMagicToken, getParty, runDraw } from './party.ts';
 import type { Member, Party } from './db/schema.ts';
 
 export type PartyContext = {
@@ -16,7 +16,17 @@ export function partyContext(event: RequestEvent): PartyContext {
 	const id = event.params.id;
 	if (!id) error(404);
 	let party = getParty(id);
-	if (!party) error(404, 'not_found');
+	if (!party) {
+		if (id.length >= 20) {
+			const hit = getMemberByMagicToken(id);
+			if (hit && hit.party.magicLinksEnabled) {
+				event.setHeaders({ 'cache-control': 'no-store' });
+				loginMember(event.cookies, hit.member);
+				redirect(303, `/p/${hit.party.id}`);
+			}
+		}
+		error(404, 'not_found');
+	}
 
 	// lazy auto-draw in case the scheduler hasn't ticked yet
 	if (
@@ -68,6 +78,16 @@ export function publicMember(m: Member) {
 	};
 }
 export type PublicMember = ReturnType<typeof publicMember>;
+
+/** Fields safe only for party/site admins (includes wishlist, phone, and private magic link token). */
+export function adminMember(m: Member) {
+	return {
+		...publicMember(m),
+		wishlist: m.wishlist,
+		phone: m.phone,
+		magicToken: m.magicToken
+	};
+}
 
 /** Party fields safe for viewers with access (no code). */
 export function publicParty(p: Party) {

@@ -13,6 +13,9 @@ export const newId = (n = 12) => pick(ID_ALPHABET, n);
 
 export const newToken = () => randomBytes(32).toString('base64url');
 
+/** 192-bit unguessable token for per-member magic links. */
+export const newMagicToken = () => randomBytes(24).toString('base64url');
+
 /** Random party code like `K7QM-4XPA`. */
 export const generatePartyCode = () => `${pick(CODE_ALPHABET, 4)}-${pick(CODE_ALPHABET, 4)}`;
 

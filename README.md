@@ -55,8 +55,17 @@ After dark — follows the device, or pick light/dark with the switch in the hea
 - **Big countdown** to the draw (then to the party). The draw happens **automatically** at the
   set time, or the admin can draw early. Everyone unwraps their result on the party page.
 - **Party admin** (password required): edit settings, date, location, code, rules, members
-  (names, passcodes, admin flag, participation). Wishlists are hidden behind "Reveal" so admins
+  (names, passcodes, phone numbers, admin flag, participation). Wishlists are hidden behind "Reveal" so admins
   don't spoil their own surprise. Archive / restore, delete. Nobody can see the assignments.
+- **Personal magic links (optional)** — enable `MAGIC_LINKS_ENABLED=true` in `.env` (for new parties) or
+  toggle **Personal magic links** in Party admin → Settings. Organisers can add members up front, import
+  phone numbers from iOS Contacts (`.vcf` export, Contact Picker, or pasted list), generate 192-bit
+  unguessable per-member links (`/p/<token>`), regenerate/revoke links, and launch pre-filled SMS
+  messages with a customisable template.
+  > **Privacy note:** Each personal magic link signs the recipient directly into their participant
+  > profile and reveals their Secret Santa assignment with no code or password. Treat every link as
+  > private and send it individually — never post personal links in a group chat. If a link is shared
+  > by mistake, regenerate or revoke it in Party admin to immediately invalidate it and log out active sessions.
 - **Website admin** at `/admin` (password from `.env`) can see and manage every party.
 - **Add to calendar** — Google Calendar links for the draw and the party, or an `.ics` file
   (iPhone, Outlook, Samsung…) with reminders.

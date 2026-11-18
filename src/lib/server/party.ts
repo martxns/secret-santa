@@ -20,6 +20,15 @@ export function getParty(id: string) {
 	return db.select().from(schema.parties).where(eq(schema.parties.id, id)).get();
 }
 
+export function getMemberByMagicToken(token: string) {
+	if (!token) return null;
+	const member = db.select().from(schema.members).where(eq(schema.members.magicToken, token)).get();
+	if (!member) return null;
+	const party = getParty(member.partyId);
+	if (!party) return null;
+	return { member, party };
+}
+
 export function codeTaken(code: string, exceptPartyId?: string) {
 	const p = findPartyByCode(code);
 	return !!p && p.id !== exceptPartyId;

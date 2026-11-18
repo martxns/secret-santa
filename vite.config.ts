@@ -16,6 +16,9 @@ export default defineConfig({
 			csrf: {
 				trustedOrigins: ['*']
 			},
+			serviceWorker: {
+				register: false
+			},
 			adapter: adapter()
 		}),
 
