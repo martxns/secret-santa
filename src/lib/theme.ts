@@ -23,9 +23,11 @@ export function applyTheme(choice: ThemeChoice) {
 }
 
 export function setTheme(choice: ThemeChoice) {
+	const attrs =
+		location.protocol === 'https:' ? 'path=/; samesite=none; secure' : 'path=/; samesite=lax';
 	document.cookie =
 		choice === 'auto'
-			? `${THEME_COOKIE}=; path=/; max-age=0; samesite=lax`
-			: `${THEME_COOKIE}=${choice}; path=/; max-age=31536000; samesite=lax`;
+			? `${THEME_COOKIE}=; ${attrs}; max-age=0`
+			: `${THEME_COOKIE}=${choice}; ${attrs}; max-age=31536000`;
 	applyTheme(choice);
 }

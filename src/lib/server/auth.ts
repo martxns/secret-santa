@@ -11,7 +11,7 @@ const SESSION_DAYS = 90;
 const cookieOpts = () => ({
 	path: '/',
 	httpOnly: true,
-	sameSite: 'lax' as const,
+	sameSite: (COOKIE_SECURE ? 'none' : 'lax') as 'none' | 'lax',
 	secure: COOKIE_SECURE,
 	maxAge: SESSION_DAYS * 24 * 3600
 });

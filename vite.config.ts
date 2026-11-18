@@ -13,6 +13,9 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
+			csrf: {
+				trustedOrigins: ['*']
+			},
 			adapter: adapter()
 		}),
 
@@ -23,6 +26,11 @@ export default defineConfig({
 			strategy: ['cookie', 'preferredLanguage', 'baseLocale']
 		})
 	],
+	server: {
+		host: '0.0.0.0',
+		port: 3000,
+		allowedHosts: true
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
