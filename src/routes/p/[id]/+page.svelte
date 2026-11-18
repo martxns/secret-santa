@@ -68,7 +68,7 @@
 				{#if data.me && !data.hasWishlist && !party.drawnAt}
 					<a href="/p/{party.id}/me" class="btn-primary btn-sm">🎁 {m.cta_write_wishlist()}</a>
 				{/if}
-				{#if data.me && !data.pushOn && !party.drawnAt}
+				{#if data.me && !data.pushOn}
 					<a href="/p/{party.id}/me#notifications" class="btn-ghost btn-sm">🔔 {m.push_nudge()}</a>
 				{/if}
 			</div>

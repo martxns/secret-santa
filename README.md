@@ -2,7 +2,7 @@
 
 **Self-hosted Secret Santa for families and friend groups — psst… don't tell anyone.**
 Create a party, invite everyone with a code, write the rules together and let the draw do its
-magic. Lithuanian 🇱🇹 and English 🇬🇧 — more languages can be added (see below).
+magic. English 🇬🇧, Lithuanian 🇱🇹, and Polish 🇵🇱 — more languages can be added (see below).
 
 ![Party page with a big countdown and a phone showing the unwrapped draw](docs/screenshots/hero.webp)
 
@@ -60,21 +60,26 @@ After dark — follows the device, or pick light/dark with the switch in the hea
 - **Personal magic links (optional)** — enable `MAGIC_LINKS_ENABLED=true` in `.env` (for new parties) or
   toggle **Personal magic links** in Party admin → Settings. Organisers can add members up front, import
   phone numbers from iOS Contacts (`.vcf` export, Contact Picker, or pasted list), assign each member's
-  preferred website language (English or Lithuanian) so their link opens the site in that language
-  automatically (while still allowing them to switch via the header menu), generate 192-bit
+  preferred website language (English, Lithuanian, or Polish) so their link opens the site in that
+  language automatically (while still allowing them to switch via the header menu), generate 192-bit
   unguessable per-member links (`/p/<token>`), regenerate/revoke links, and launch pre-filled SMS
   messages with a customisable template.
   > **Privacy note:** Each personal magic link signs the recipient directly into their participant
   > profile and reveals their Secret Santa assignment with no code or password. Treat every link as
   > private and send it individually — never post personal links in a group chat. If a link is shared
   > by mistake, regenerate or revoke it in Party admin to immediately invalidate it and log out active sessions.
+- **Updates & reminders (Push + SMS)** — from Party admin, organisers can broadcast instant Web Push
+  notifications or launch pre-filled individual/group SMS messages for wishlist reminders, new
+  wishlist item alerts, event reminders, or custom updates (targeted to everyone or only members
+  missing a wishlist).
 - **Website admin** at `/admin` (password from `.env`) can see and manage every party.
 - **Add to calendar** — Google Calendar links for the draw and the party, or an `.ics` file
   (iPhone, Outlook, Samsung…) with reminders.
 - **Push notifications** (turn on in _My profile_): when the draw happens, a day before the draw
-  (with a nudge if your wishlist is empty) and the party, and when the person you drew updates
-  their wishlist — without ever naming them on the lock screen. Works in Chrome/Firefox/Edge and
-  on iPhone once the app is added to the Home Screen (iOS 16.4+; if your browser has no _Add to Home Screen_, use Safari).
+  (with a nudge if your wishlist is empty) and the party, when the person you drew updates
+  their wishlist — without ever naming them on the lock screen — and when the organiser sends
+  an update. Works in Chrome/Firefox/Edge and on iPhone once the app is added to the Home Screen
+  (iOS 16.4+; if your browser has no _Add to Home Screen_, use Safari).
 - **Add to Home Screen** (on iPhone/iPad: from Safari, the most reliable) gives a proper icon and opens full screen like an
   app (on iOS you log in once more inside the app — it doesn't share Safari's cookies).
 - **Dark theme** — follows the device by default; the ◐ switch in the header cycles
@@ -114,7 +119,7 @@ PW_BASE_URL=http://localhost:8976 PW_ADMIN_PASSWORD=… npx playwright test   # 
 ```
 
 UI strings live in `scripts/messages.py` → `python3 scripts/messages.py` regenerates
-`messages/{en,lt}.json`. After changing `src/lib/server/db/schema.ts` run `npm run db:generate`.
+`messages/{en,lt,pl}.json`. After changing `src/lib/server/db/schema.ts` run `npm run db:generate`.
 
 ### Adding a language
 

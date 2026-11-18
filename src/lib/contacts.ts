@@ -38,6 +38,12 @@ export function buildSmsHref(phone: string, message: string): string {
 	return digits ? `sms:${digits}?&body=${body}` : `sms:?&body=${body}`;
 }
 
+export function buildGroupSmsHref(phones: string[], message: string): string {
+	const unique = [...new Set(phones.map(smsPhoneDigits).filter(Boolean))];
+	const body = encodeURIComponent(message);
+	return unique.length ? `sms:${unique.join(',')}?&body=${body}` : `sms:?&body=${body}`;
+}
+
 function decodeQuotedPrintable(input: string): string {
 	const cleaned = input.replace(/=\r?\n/g, '');
 	const bytes: number[] = [];

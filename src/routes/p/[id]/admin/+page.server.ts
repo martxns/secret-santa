@@ -1,8 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { TIMEZONE } from '$app/env/public';
+import { m } from '#lib/paraglide/messages.js';
 import { db, schema } from '#lib/server/db/index.ts';
-import { hashSecret } from '#lib/server/auth.ts';
+import { hashSecret, isRateLimited, recordFailure } from '#lib/server/auth.ts';
 import { adminMember, formString, publicMember, requireAdmin } from '#lib/server/guards.ts';
 import {
 	cleanCustomCode,
@@ -35,6 +36,8 @@ import {
 	validateNames,
 	validatePasscode
 } from '#lib/server/members.ts';
+import { asLocale } from '#lib/server/notifications.ts';
+import { notifyMembers, pushEnabledMemberIds } from '#lib/server/push.ts';
 import { sanitizeRules } from '#lib/rules/catalog.ts';
 import { CURRENCIES } from '#lib/currencies.ts';
 import { normalizePhone } from '#lib/contacts.ts';
@@ -45,12 +48,14 @@ export const load: PageServerLoad = (event) => {
 	const { party } = requireAdmin(event);
 	const members = getMembers(party.id);
 	const byId = new Map(members.map((x) => [x.id, publicMember(x)]));
+	const pushEnabledIds = pushEnabledMemberIds(members.map((x) => x.id));
 	return {
 		admin: {
 			code: party.code,
 			drawError: party.drawError,
 			magicLinksEnabled: party.magicLinksEnabled,
-			smsTemplate: party.smsTemplate
+			smsTemplate: party.smsTemplate,
+			pushEnabledIds
 		},
 		rules: getRules(party.id),
 		members: members.map(adminMember),
@@ -258,6 +263,70 @@ export const actions: Actions = {
 		const smsTemplate = data.get('reset') === '1' ? '' : formString(data, 'smsTemplate', 1000);
 		db.update(schema.parties).set({ smsTemplate }).where(eq(schema.parties.id, party.id)).run();
 		return ok('sms');
+	},
+	sendPush: async (event) => {
+		const { party } = requireAdmin(event);
+		if (party.archivedAt) return bad('updates', 'archived');
+		if (isRateLimited(event, 'admin-push')) return bad('updates', 'rate_limited', 429);
+		recordFailure(event, 'admin-push');
+
+		const data = await event.request.formData();
+		const audience = String(data.get('audience') ?? 'all');
+		const preset = String(data.get('preset') ?? 'custom');
+		const customMessage = formString(data, 'message', 500);
+
+		const isKnownPreset =
+			preset === 'wishlist_reminder' || preset === 'wishlist_new' || preset === 'event_reminder';
+		if (!isKnownPreset && !customMessage) return bad('updates', 'invalid');
+
+		const allMembers = getMembers(party.id);
+		const targets =
+			audience === 'no_wishlist' ? allMembers.filter((mem) => !mem.wishlist.trim()) : allMembers;
+		const targetIds = targets.map((mem) => mem.id);
+		const memberLocaleMap = new Map(targets.map((mem) => [mem.id, mem.locale]));
+		const subscribedMembers = pushEnabledMemberIds(targetIds);
+
+		const targetUrl =
+			preset === 'wishlist_reminder' ? `/p/${party.id}/me` : `/p/${party.id}`;
+
+		const sentDevices = await notifyMembers(targetIds, (subLocale, memberId) => {
+			if (customMessage) {
+				return {
+					title: party.name,
+					body: customMessage,
+					url: targetUrl,
+					tag: `update-${party.id}`
+				};
+			}
+			const loc = asLocale(memberLocaleMap.get(memberId) || subLocale);
+			if (preset === 'wishlist_reminder') {
+				return {
+					title: m.updates_push_wishlist_reminder_title({ party: party.name }, { locale: loc }),
+					body: m.updates_push_wishlist_reminder_body({}, { locale: loc }),
+					url: targetUrl,
+					tag: `wishlist-rem-${party.id}`
+				};
+			}
+			if (preset === 'wishlist_new') {
+				return {
+					title: m.updates_push_wishlist_new_title({ party: party.name }, { locale: loc }),
+					body: m.updates_push_wishlist_new_body({}, { locale: loc }),
+					url: targetUrl,
+					tag: `wishlist-new-${party.id}`
+				};
+			}
+			return {
+				title: m.updates_push_event_reminder_title({ party: party.name }, { locale: loc }),
+				body: m.updates_push_event_reminder_body({}, { locale: loc }),
+				url: targetUrl,
+				tag: `event-rem-${party.id}`
+			};
+		});
+
+		return ok('updates', {
+			pushDevices: sentDevices,
+			pushMembers: subscribedMembers.length
+		});
 	},
 	importContacts: async (event) => {
 		const { party } = requireAdmin(event);

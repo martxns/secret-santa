@@ -10,7 +10,7 @@
 	import { displayName, fullName } from '#lib/names.ts';
 	import { formatDateTime, toInputValue } from '#lib/time.ts';
 	import { CURRENCIES } from '#lib/currencies.ts';
-	import { buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
+	import { buildGroupSmsHref, buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import ContactsImport from '#lib/components/ContactsImport.svelte';
 	import type { RuleEntry } from '#lib/rules/catalog.ts';
@@ -36,6 +36,27 @@
 		smsTemplateDraft = data.admin.smsTemplate;
 	});
 
+	type UpdatePreset = 'wishlist_reminder' | 'wishlist_new' | 'event_reminder' | 'custom';
+	let updateAudience = $state<'all' | 'no_wishlist'>('all');
+	let updatePreset = $state<UpdatePreset>('wishlist_reminder');
+	function presetTemplateFor(preset: UpdatePreset, loc: Locale): string {
+		if (preset === 'wishlist_reminder') {
+			return m.updates_tpl_wishlist_reminder({ party: '{party}', link: '{link}' }, { locale: loc });
+		}
+		if (preset === 'wishlist_new') {
+			return m.updates_tpl_wishlist_new({ party: '{party}', link: '{link}' }, { locale: loc });
+		}
+		if (preset === 'event_reminder') {
+			return m.updates_tpl_event_reminder({ party: '{party}', link: '{link}' }, { locale: loc });
+		}
+		return '';
+	}
+	let updateMessageDraft = $state(presetTemplateFor('wishlist_reminder', getLocale()));
+	function onPresetChange(next: UpdatePreset) {
+		updatePreset = next;
+		updateMessageDraft = presetTemplateFor(next, getLocale());
+	}
+
 	const keep: SubmitFunction =
 		() =>
 		async ({ update }) =>
@@ -54,12 +75,68 @@
 				? {
 						ok: true,
 						importedCount:
-							'importedCount' in form ? (form.importedCount as number) : undefined
+							'importedCount' in form ? (form.importedCount as number) : undefined,
+						pushDevices: 'pushDevices' in form ? (form.pushDevices as number) : undefined,
+						pushMembers: 'pushMembers' in form ? (form.pushMembers as number) : undefined
 					}
 				: null;
 
 	const participants = $derived(data.members.filter((x) => x.participates).length);
 	const missingLinks = $derived(data.members.some((x) => !x.magicToken));
+	const pushEnabledCount = $derived(data.admin.pushEnabledIds.length);
+	const pushEnabledSet = $derived(new Set(data.admin.pushEnabledIds));
+
+	const updateTargets = $derived(
+		updateAudience === 'no_wishlist'
+			? data.members.filter((x) => !x.wishlist.trim())
+			: data.members
+	);
+	const updateTargetsWithPhone = $derived(updateTargets.filter((x) => !!x.phone.trim()));
+	const updateUsingPreset = $derived(
+		updatePreset !== 'custom' &&
+			updateMessageDraft.trim() === presetTemplateFor(updatePreset, getLocale()).trim()
+	);
+	const sharedUpdateUrl = $derived(
+		updatePreset === 'wishlist_reminder'
+			? `${page.url.origin}/p/${party.id}/me`
+			: `${page.url.origin}/p/${party.id}`
+	);
+	const groupUpdateSmsHref = $derived(
+		buildGroupSmsHref(
+			updateTargetsWithPhone.map((x) => x.phone),
+			renderSmsMessage(
+				updateUsingPreset ? presetTemplateFor(updatePreset, getLocale()) : updateMessageDraft,
+				{ name: '', party: party.name, link: sharedUpdateUrl },
+				sharedUpdateUrl
+			)
+		)
+	);
+
+	function memberUpdateSmsHref(member: {
+		firstName: string;
+		lastName: string;
+		nickname: string;
+		phone: string;
+		magicToken: string | null;
+		locale: string | null;
+	}) {
+		const loc =
+			member.locale && (locales as readonly string[]).includes(member.locale)
+				? (member.locale as Locale)
+				: getLocale();
+		const tpl = updateUsingPreset ? presetTemplateFor(updatePreset, loc) : updateMessageDraft;
+		const link =
+			data.admin.magicLinksEnabled && member.magicToken
+				? `${page.url.origin}/p/${member.magicToken}`
+				: sharedUpdateUrl;
+		const body = renderSmsMessage(
+			tpl,
+			{ name: displayName(member), party: party.name, link },
+			link
+		);
+		return buildSmsHref(member.phone, body);
+	}
+
 	const defaultSmsTemplate = $derived(
 		m.sms_template_default({ name: '{name}', party: '{party}', link: '{link}' })
 	);
@@ -115,11 +192,24 @@
 	{@const f = msg(section)}
 	{#if f?.error}<p class="mt-3 error" role="alert">{errorText(f.error)}</p>{/if}
 	{#if f?.ok}
-		<p class="mt-3 success" role="status">
-			✓ {f.importedCount !== undefined
-				? m.contacts_imported_ok({ count: String(f.importedCount) })
-				: m.saved()}
-		</p>
+		{#if f.pushDevices !== undefined}
+			{#if f.pushDevices > 0}
+				<p class="mt-3 success" role="status">
+					✓ {m.updates_push_sent({
+						devices: String(f.pushDevices),
+						members: String(f.pushMembers ?? 0)
+					})}
+				</p>
+			{:else}
+				<p class="mt-3 text-sm text-ink-soft" role="status">{m.updates_push_none()}</p>
+			{/if}
+		{:else}
+			<p class="mt-3 success" role="status">
+				✓ {f.importedCount !== undefined
+					? m.contacts_imported_ok({ count: String(f.importedCount) })
+					: m.saved()}
+			</p>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -312,6 +402,7 @@
 									{#if member.locale && member.locale in LANGUAGES}
 										<span>🌐 {LANGUAGES[member.locale as Locale].name}</span>
 									{/if}
+									{#if pushEnabledSet.has(member.id)}<span>🔔</span>{/if}
 								</p>
 							</div>
 						</div>
@@ -497,6 +588,99 @@
 			</details>
 		{/if}
 		{@render feedback('members')}
+	</section>
+
+	<!-- updates & reminders (push + sms) -->
+	<section class="card lg:col-span-2" id="updates">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<h2 class="text-2xl font-bold text-pine">📣 {m.updates_title()}</h2>
+			<span class="chip">
+				🔔 {m.updates_push_coverage({
+					enabled: String(pushEnabledCount),
+					total: String(data.members.length)
+				})}
+			</span>
+		</div>
+		<p class="mt-1 text-sm text-ink-soft">{m.updates_lead()}</p>
+
+		<form method="POST" action="?/sendPush" class="mt-4 space-y-4" use:enhance={keep}>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="label" for="update-audience">{m.updates_audience()}</label>
+					<select id="update-audience" name="audience" class="input" bind:value={updateAudience}>
+						<option value="all">{m.updates_audience_all()} ({data.members.length})</option>
+						<option value="no_wishlist">
+							{m.updates_audience_no_wishlist()} ({data.members.filter((x) => !x.wishlist.trim())
+								.length})
+						</option>
+					</select>
+				</div>
+				<div>
+					<label class="label" for="update-preset">{m.updates_preset()}</label>
+					<select
+						id="update-preset"
+						name="preset"
+						class="input"
+						value={updatePreset}
+						onchange={(e) => onPresetChange(e.currentTarget.value as UpdatePreset)}
+					>
+						<option value="wishlist_reminder">{m.updates_preset_wishlist_reminder()}</option>
+						<option value="wishlist_new">{m.updates_preset_wishlist_new()}</option>
+						<option value="event_reminder">{m.updates_preset_event_reminder()}</option>
+						<option value="custom">{m.updates_preset_custom()}</option>
+					</select>
+				</div>
+			</div>
+
+			<div>
+				<label class="label" for="update-message">{m.updates_message_label()}</label>
+				<textarea
+					id="update-message"
+					rows="3"
+					maxlength="500"
+					class="input text-sm"
+					bind:value={updateMessageDraft}
+					required={updatePreset === 'custom'}
+				></textarea>
+				<input type="hidden" name="message" value={updateUsingPreset ? '' : updateMessageDraft} />
+				<p class="mt-1 text-xs text-ink-soft">
+					{m.updates_message_help({ name: '{name}', party: '{party}', link: '{link}' })}
+				</p>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-2">
+				<button
+					class="btn-pine"
+					disabled={!!party.archivedAt || (updatePreset === 'custom' && !updateMessageDraft.trim())}
+				>
+					🔔 {m.updates_send_push()}
+				</button>
+				{#if updateTargetsWithPhone.length >= 2}
+					<a href={groupUpdateSmsHref} class="btn-ghost">
+						💬 {m.updates_sms_group({ count: String(updateTargetsWithPhone.length) })}
+					</a>
+				{/if}
+			</div>
+			{#if updateTargetsWithPhone.length >= 2 && data.admin.magicLinksEnabled}
+				<p class="text-xs text-ink-soft">{m.updates_sms_group_note()}</p>
+			{/if}
+			{@render feedback('updates')}
+		</form>
+
+		<div class="mt-4 border-t border-ink/10 pt-3">
+			{#if updateTargetsWithPhone.length}
+				<p class="text-xs font-semibold text-ink-soft">{m.updates_sms_individual()}</p>
+				<div class="mt-2 flex flex-wrap gap-2">
+					{#each updateTargetsWithPhone as mem (mem.id)}
+						<a href={memberUpdateSmsHref(mem)} class="btn-ghost btn-sm">
+							💬 {displayName(mem)}
+						</a>
+					{/each}
+				</div>
+			{:else}
+				<p class="text-xs text-ink-soft">{m.updates_no_phones()}</p>
+			{/if}
+		</div>
 	</section>
 
 	<!-- exclusions -->

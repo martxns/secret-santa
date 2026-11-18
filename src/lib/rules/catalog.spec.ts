@@ -23,6 +23,14 @@ describe('gift_count rule', () => {
 		expect(sentence('21')).toBe('Kiekvienas paruošia 21 dovaną tam vienam ištrauktam žmogui.');
 		expect(sentence('22')).toBe('Kiekvienas paruošia 22 dovanas tam vienam ištrauktam žmogui.');
 	});
+
+	it('uses Polish plural forms', () => {
+		overwriteGetLocale(() => 'pl');
+		expect(sentence('1')).toBe('Każdy przygotowuje 1 prezent dla jednej wylosowanej osoby.');
+		expect(sentence('3')).toBe('Każdy przygotowuje 3 prezenty dla jednej wylosowanej osoby.');
+		expect(sentence('5')).toBe('Każdy przygotowuje 5 prezentów dla jednej wylosowanej osoby.');
+		expect(sentence('22')).toBe('Każdy przygotowuje 22 prezenty dla jednej wylosowanej osoby.');
+	});
 });
 
 describe('sanitizeRules', () => {

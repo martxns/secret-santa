@@ -102,6 +102,20 @@ export function subscribedEndpoints(memberId: string): string[] {
 		.map((r) => r.endpoint);
 }
 
+export function pushEnabledMemberIds(memberIds: string[]): string[] {
+	if (!memberIds.length) return [];
+	return [
+		...new Set(
+			db
+				.select({ memberId: schema.pushSubscriptions.memberId })
+				.from(schema.pushSubscriptions)
+				.where(inArray(schema.pushSubscriptions.memberId, memberIds))
+				.all()
+				.map((r) => r.memberId)
+		)
+	];
+}
+
 /* ---------- delivery ---------- */
 
 /**

@@ -341,15 +341,15 @@ if (!COMPOSE_ONLY) {
 	await settle(kasia);
 	mobReveal = await kasia.screenshot();
 
-	const ltCtx = await browser.newContext({ ...mobile, locale: 'lt-LT' });
-	const ltPage = await ltCtx.newPage();
-	await ltCtx.addCookies(await famMembers.zosia.ctx.cookies());
-	await ltPage.goto(BASE + famParty.url);
-	await ltPage.getByRole('button', { name: /^(Language|Kalba)/ }).click();
-	await ltPage.getByRole('menuitemradio', { name: 'Lietuvių' }).click();
-	await ltPage.waitForLoadState('networkidle');
-	await settle(ltPage);
-	mobPl = await ltPage.screenshot();
+	const plCtx = await browser.newContext({ ...mobile, locale: 'pl-PL' });
+	const plPage = await plCtx.newPage();
+	await plCtx.addCookies(await famMembers.zosia.ctx.cookies());
+	await plPage.goto(BASE + famParty.url);
+	await plPage.getByRole('button', { name: /^(Language|Kalba|Język)/ }).click();
+	await plPage.getByRole('menuitemradio', { name: 'Polski' }).click();
+	await plPage.waitForLoadState('networkidle');
+	await settle(plPage);
+	mobPl = await plPage.screenshot();
 
 	/* ---------- dark theme (follows the device setting) ---------- */
 

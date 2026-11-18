@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildGroupSmsHref,
 	buildSmsHref,
 	parseContactText,
 	parseVcf,
@@ -82,5 +83,11 @@ describe('SMS helpers', () => {
 			'Default {link}'
 		);
 		expect(msg).toBe('Merry Christmas Bob!\nhttps://example.com/p/tok');
+	});
+
+	it('builds deduplicated multi-recipient group SMS href', () => {
+		expect(
+			buildGroupSmsHref(['+370 600 12345', '+48 600-123-456', '+37060012345', ''], 'Hello!')
+		).toBe('sms:+37060012345,+48600123456?&body=Hello!');
 	});
 });

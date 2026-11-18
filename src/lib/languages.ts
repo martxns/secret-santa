@@ -18,7 +18,8 @@ export type Language = {
  */
 export const LANGUAGES: Record<Locale, Language> = {
 	en: { name: 'English', flag: '/flags/gb.svg', intl: 'en-GB', quotes: ['“', '”'] },
-	lt: { name: 'Lietuvių', flag: '/flags/lt.svg', intl: 'lt-LT', quotes: ['„', '“'] }
+	lt: { name: 'Lietuvių', flag: '/flags/lt.svg', intl: 'lt-LT', quotes: ['„', '“'] },
+	pl: { name: 'Polski', flag: '/flags/pl.svg', intl: 'pl-PL', quotes: ['„', '”'] }
 };
 
 export const language = (locale: string = getLocale()): Language =>

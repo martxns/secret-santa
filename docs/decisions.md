@@ -49,8 +49,8 @@ using `src/lib/time.ts` (no date library).
 
 ## Locale
 
-Paraglide strategy: cookie → preferred language → base locale (`en`), supporting English (`en`)
-and Lithuanian (`lt`). No URL prefixes.
+Paraglide strategy: cookie → preferred language → base locale (`en`), supporting English (`en`),
+Lithuanian (`lt`), and Polish (`pl`). No URL prefixes.
 
 ## Home-screen app opens full screen
 
