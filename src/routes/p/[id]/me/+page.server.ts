@@ -5,8 +5,11 @@ import { hashSecret, verifySecret } from '#lib/server/auth.ts';
 import { formString, publicMember, requireMember } from '#lib/server/guards.ts';
 import {
 	activeExclusionsFor,
+	addWishlistItem,
 	clearAvatar,
+	getWishlistItems,
 	readNames,
+	removeWishlistItem,
 	saveAvatar,
 	validateNames,
 	validatePasscode
@@ -37,6 +40,7 @@ export const load: PageServerLoad = (event) => {
 	);
 	return {
 		wishlist: me.wishlist,
+		wishlistItems: getWishlistItems(me.id),
 		exclusions,
 		candidates: members.filter((x) => x.id !== me.id && !busyIds.has(x.id)).map(publicMember),
 		others: members.length - 1,
@@ -66,6 +70,30 @@ export const actions: Actions = {
 			.where(eq(schema.members.id, me.id))
 			.run();
 		return ok('profile');
+	},
+	addWishlistItem: async (event) => {
+		const { party, me } = requireMember(event);
+		if (party.archivedAt) return fail(400, { section: 'wishlist', error: 'archived' });
+		const data = await event.request.formData();
+		const title = formString(data, 'title', 180);
+		if (!title) return fail(400, { section: 'wishlist', error: 'wishlist_item_required' });
+		addWishlistItem(me.id, party, {
+			title,
+			price: formString(data, 'price', 40),
+			imageUrl: formString(data, 'imageUrl', 1000),
+			productUrl: formString(data, 'productUrl', 1000),
+			store: formString(data, 'store', 80),
+			note: formString(data, 'note', 300)
+		});
+		return ok('wishlist');
+	},
+	removeWishlistItem: async (event) => {
+		const { party, me } = requireMember(event);
+		if (party.archivedAt) return fail(400, { section: 'wishlist', error: 'archived' });
+		const data = await event.request.formData();
+		const itemId = String(data.get('id') ?? '');
+		if (itemId) removeWishlistItem(me.id, party, itemId);
+		return ok('wishlist');
 	},
 	avatar: async (event) => {
 		const { me } = requireMember(event);

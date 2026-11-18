@@ -142,7 +142,29 @@ export const pushSubscriptions = sqliteTable(
 	]
 );
 
+export const wishlistItems = sqliteTable(
+	'wishlist_items',
+	{
+		id: text('id').primaryKey(),
+		memberId: text('member_id')
+			.notNull()
+			.references(() => members.id, { onDelete: 'cascade' }),
+		title: text('title').notNull(),
+		price: text('price').notNull().default(''),
+		imageUrl: text('image_url').notNull().default(''),
+		productUrl: text('product_url').notNull().default(''),
+		store: text('store').notNull().default(''),
+		note: text('note').notNull().default(''),
+		position: integer('position').notNull().default(0),
+		createdAt: ts('created_at')
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(t) => [index('wishlist_items_member_idx').on(t.memberId)]
+);
+
 export type Party = typeof parties.$inferSelect;
 export type Member = typeof members.$inferSelect;
 export type Exclusion = typeof exclusions.$inferSelect;
 export type Rule = typeof rules.$inferSelect;
+export type WishlistItem = typeof wishlistItems.$inferSelect;

@@ -8,6 +8,7 @@ import {
 	getRules,
 	markAssignmentRevealed
 } from '#lib/server/party.ts';
+import { getWishlistItems } from '#lib/server/members.ts';
 import { formString, partyContext, publicMember } from '#lib/server/guards.ts';
 import { normalizeCode } from '#lib/server/ids.ts';
 import { subscribedEndpoints } from '#lib/server/push.ts';
@@ -26,12 +27,19 @@ export const load: PageServerLoad = (event) => {
 
 	const receiver = me && party.drawnAt ? getAssignment(party.id, me.id) : null;
 	const revealedAt = me && party.drawnAt ? getMemberRevealAt(party.id, me.id) : null;
+	const myItemsCount = me ? getWishlistItems(me.id).length : 0;
 	return {
 		rules: getRules(party.id),
 		members: getMembers(party.id).map(publicMember),
-		assignment: receiver ? { ...publicMember(receiver), wishlist: receiver.wishlist } : null,
+		assignment: receiver
+			? {
+					...publicMember(receiver),
+					wishlist: receiver.wishlist,
+					wishlistItems: getWishlistItems(receiver.id)
+				}
+			: null,
 		assignmentRevealed: !!revealedAt,
-		hasWishlist: !!me?.wishlist.trim(),
+		hasWishlist: !!me?.wishlist.trim() || myItemsCount > 0,
 		created: event.url.searchParams.has('created'),
 		pushOn: me ? subscribedEndpoints(me.id).length > 0 : false
 	};

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from './db/index.ts';
 import { newId, newMagicToken } from './ids.ts';
 import { revokeMemberSessions } from './auth.ts';
@@ -9,6 +9,7 @@ import { getMembers, removeAvatarFile, uploadsDir } from './party.ts';
 import { displayName } from '#lib/names.ts';
 import { normalizePhone } from '#lib/contacts.ts';
 import { locales, type Locale } from '#lib/paraglide/runtime.js';
+import { sanitizeHttpUrl, type PublicWishlistItem } from '#lib/wishlist.ts';
 import { formString } from './guards.ts';
 
 export function normalizeMemberLocale(raw: unknown): Locale | null {
@@ -197,4 +198,97 @@ export function activeExclusionsFor(partyId: string, memberIds: string[]) {
 			)
 		)
 		.all();
+}
+
+function toPublicWishlistItem(row: typeof schema.wishlistItems.$inferSelect): PublicWishlistItem {
+	return {
+		id: row.id,
+		title: row.title,
+		price: row.price,
+		imageUrl: row.imageUrl,
+		productUrl: row.productUrl,
+		store: row.store,
+		note: row.note
+	};
+}
+
+export function getWishlistItems(memberId: string): PublicWishlistItem[] {
+	return db
+		.select()
+		.from(schema.wishlistItems)
+		.where(eq(schema.wishlistItems.memberId, memberId))
+		.orderBy(asc(schema.wishlistItems.position), asc(schema.wishlistItems.createdAt))
+		.all()
+		.map(toPublicWishlistItem);
+}
+
+export function getWishlistItemsByMemberIds(
+	memberIds: string[]
+): Map<string, PublicWishlistItem[]> {
+	const map = new Map<string, PublicWishlistItem[]>();
+	if (!memberIds.length) return map;
+	const rows = db
+		.select()
+		.from(schema.wishlistItems)
+		.where(inArray(schema.wishlistItems.memberId, memberIds))
+		.orderBy(asc(schema.wishlistItems.position), asc(schema.wishlistItems.createdAt))
+		.all();
+	for (const row of rows) {
+		const list = map.get(row.memberId) ?? [];
+		list.push(toPublicWishlistItem(row));
+		map.set(row.memberId, list);
+	}
+	return map;
+}
+
+export function addWishlistItem(
+	memberId: string,
+	party: { drawnAt: Date | null },
+	input: {
+		title: string;
+		price?: string;
+		imageUrl?: string;
+		productUrl?: string;
+		store?: string;
+		note?: string;
+	}
+): PublicWishlistItem {
+	const existing = getWishlistItems(memberId);
+	const item = {
+		id: newId(),
+		memberId,
+		title: input.title.trim().slice(0, 180),
+		price: (input.price ?? '').trim().slice(0, 40),
+		imageUrl: sanitizeHttpUrl(input.imageUrl ?? ''),
+		productUrl: sanitizeHttpUrl(input.productUrl ?? ''),
+		store: (input.store ?? '').trim().slice(0, 80),
+		note: (input.note ?? '').trim().slice(0, 300),
+		position: existing.length
+	};
+	db.insert(schema.wishlistItems).values(item).run();
+	if (party.drawnAt) {
+		db.update(schema.members)
+			.set({ wishlistChangedAt: new Date() })
+			.where(eq(schema.members.id, memberId))
+			.run();
+	}
+	return toPublicWishlistItem({ ...item, createdAt: new Date() });
+}
+
+export function removeWishlistItem(
+	memberId: string,
+	party: { drawnAt: Date | null },
+	itemId: string
+): boolean {
+	const deleted = db
+		.delete(schema.wishlistItems)
+		.where(and(eq(schema.wishlistItems.id, itemId), eq(schema.wishlistItems.memberId, memberId)))
+		.run();
+	if (deleted.changes > 0 && party.drawnAt) {
+		db.update(schema.members)
+			.set({ wishlistChangedAt: new Date() })
+			.where(eq(schema.members.id, memberId))
+			.run();
+	}
+	return deleted.changes > 0;
 }

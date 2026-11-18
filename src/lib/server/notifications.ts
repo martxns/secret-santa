@@ -1,6 +1,6 @@
 // What we notify about, and when. Delivery lives in push.ts.
 // Notification texts are shown on lock screens: never name who drew whom.
-import { and, eq, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { TIMEZONE } from '$app/env/public';
 import { m } from '#lib/paraglide/messages.js';
 import { locales, baseLocale, type Locale } from '#lib/paraglide/runtime.js';
@@ -64,12 +64,22 @@ export async function sendDueNotifications(now = new Date()) {
 				.where(eq(schema.parties.id, party.id))
 				.run();
 			const people = new Map(participants(party.id).map((p) => [p.id, p.wishlist]));
-			await notifyMembers([...people.keys()], (l, memberId) => {
+			const ids = [...people.keys()];
+			const itemRows = ids.length
+				? db
+						.select({ memberId: schema.wishlistItems.memberId })
+						.from(schema.wishlistItems)
+						.where(inArray(schema.wishlistItems.memberId, ids))
+						.all()
+				: [];
+			const hasStructured = new Set(itemRows.map((r) => r.memberId));
+			await notifyMembers(ids, (l, memberId) => {
 				const locale = asLocale(l);
 				const when = formatDateTime(party.drawAt, locale, TIMEZONE);
+				const hasWishlist = !!people.get(memberId)?.trim() || hasStructured.has(memberId);
 				return {
 					title: m.push_draw_soon_title({ name: party.name }, { locale }),
-					body: people.get(memberId)?.trim()
+					body: hasWishlist
 						? m.push_draw_soon_body({ when }, { locale })
 						: m.push_draw_soon_empty({ when }, { locale }),
 					url: `${partyUrl(party.id)}/me`,

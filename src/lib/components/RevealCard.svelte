@@ -2,17 +2,25 @@
 	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
 	import { displayName, fullName, type NamedMember } from '#lib/names.ts';
+	import type { PublicWishlistItem } from '#lib/wishlist.ts';
 	import Avatar from './Avatar.svelte';
 
 	let {
 		receiver,
 		alreadyRevealed = false
 	}: {
-		receiver: NamedMember & { id: string; avatar: string | null; wishlist: string };
+		receiver: NamedMember & {
+			id: string;
+			avatar: string | null;
+			wishlist: string;
+			wishlistItems?: PublicWishlistItem[];
+		};
 		alreadyRevealed?: boolean;
 	} = $props();
 	let open = $state(false);
 	let reported = $state(false);
+	let brokenImages = $state<Record<string, boolean>>({});
+	const items = $derived(receiver.wishlistItems ?? []);
 </script>
 
 <section
@@ -77,7 +85,67 @@
 				<p class="text-xs font-bold tracking-wider text-ribbon uppercase">
 					📝 {m.their_wishlist()}
 				</p>
-				<p class="mt-2 whitespace-pre-wrap">{receiver.wishlist || m.wishlist_empty_theirs()}</p>
+
+				{#if items.length}
+					<ul class="mt-3 grid gap-3 sm:grid-cols-2">
+						{#each items as item (item.id)}
+							<li
+								class="flex gap-3 rounded-xl border border-[#2b1d17]/10 bg-white/90 p-3 shadow-xs"
+							>
+								<div
+									class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-1 ring-1 ring-[#2b1d17]/10"
+								>
+									{#if item.imageUrl && !brokenImages[item.imageUrl]}
+										<img
+											src={item.imageUrl}
+											alt={item.title}
+											class="max-h-full max-w-full object-contain"
+											loading="lazy"
+											referrerpolicy="no-referrer"
+											onerror={() => (brokenImages = { ...brokenImages, [item.imageUrl]: true })}
+										/>
+									{:else}
+										<span class="text-2xl" aria-hidden="true">🎁</span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									{#if item.store}
+										<p class="text-[11px] font-bold tracking-wider text-[#6b5a4e] uppercase">
+											{item.store}
+										</p>
+									{/if}
+									<p class="line-clamp-2 text-sm leading-snug font-semibold text-[#2b1d17]">
+										{item.title}
+									</p>
+									{#if item.price}
+										<p class="mt-0.5 text-sm font-bold text-[#17382a] tabular-nums">
+											{item.price}
+										</p>
+									{/if}
+									{#if item.note}
+										<p class="mt-1 text-xs text-[#6b5a4e]">{item.note}</p>
+									{/if}
+									{#if item.productUrl}
+										<a
+											href={item.productUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="mt-1.5 inline-block text-xs font-semibold text-ribbon underline underline-offset-2"
+										>
+											{m.wishlist_view_item()} ↗
+										</a>
+									{/if}
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if receiver.wishlist.trim()}
+					<p class="mt-3 whitespace-pre-wrap">{receiver.wishlist}</p>
+				{:else if !items.length}
+					<p class="mt-2 whitespace-pre-wrap">{m.wishlist_empty_theirs()}</p>
+				{/if}
 			</div>
 			<button
 				class="mt-4 text-sm font-semibold text-cream/80 underline underline-offset-2"

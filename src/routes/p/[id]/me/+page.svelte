@@ -5,18 +5,21 @@
 	import { displayName } from '#lib/names.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import PushToggle from '#lib/components/PushToggle.svelte';
+	import WishlistPicker from '#lib/components/WishlistPicker.svelte';
 	import type { PageProps } from './$types';
 	import type { SubmitFunction } from '$app/forms';
 
 	let { data, form }: PageProps = $props();
 	const me = $derived(data.me!);
 	let uploading = $state(false);
+	let brokenImages = $state<Record<string, boolean>>({});
 	// The wishlist stays hidden until asked for — someone may be looking over your shoulder.
 	// An empty one starts open (nothing to hide, and new members are told to write it).
 	// svelte-ignore state_referenced_locally
 	let wish = $state(data.wishlist);
 	// svelte-ignore state_referenced_locally
-	let showWish = $state(!data.wishlist);
+	let showWish = $state(!data.wishlist && !data.wishlistItems.length);
+	const hasAnyWishlist = $derived(!!wish || data.wishlistItems.length > 0);
 
 	const keep: SubmitFunction =
 		() =>
@@ -41,7 +44,7 @@
 {/if}
 
 <div class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-	<!-- profile -->
+	<!-- profile & wishlist -->
 	<section class="card">
 		<h1 class="text-3xl font-black text-pine">{m.my_profile()}</h1>
 
@@ -107,7 +110,7 @@
 					{:else}
 						<span class="label">🎁 {m.wishlist()}</span>
 					{/if}
-					{#if wish}
+					{#if hasAnyWishlist}
 						<button
 							type="button"
 							class="mb-1.5 btn-ghost btn-sm"
@@ -122,11 +125,12 @@
 					<textarea
 						id="wishlist"
 						name="wishlist"
-						rows="6"
+						rows="4"
 						maxlength="4000"
 						class="input"
 						placeholder={m.wishlist_ph()}
 						bind:value={wish}></textarea>
+					<p class="mt-1 text-xs text-ink-soft">{m.wishlist_notes_label()}</p>
 				{:else}
 					<input type="hidden" name="wishlist" value={wish} />
 					<p
@@ -141,6 +145,90 @@
 			<button class="btn-pine">{m.save()}</button>
 			{@render feedback('profile')}
 		</form>
+
+		{#if showWish}
+			<div class="mt-6 space-y-4 border-t border-ink/10 pt-6">
+				<h2 class="text-xl font-bold text-pine">
+					🛍️ {m.wishlist_items_title({ count: String(data.wishlistItems.length) })}
+				</h2>
+
+				{#if data.wishlistItems.length}
+					<ul class="grid gap-3 sm:grid-cols-2">
+						{#each data.wishlistItems as item (item.id)}
+							<li
+								class="flex gap-3 rounded-2xl border border-ink/10 bg-snow/95 p-3 shadow-xs"
+							>
+								<div
+									class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1.5 ring-1 ring-ink/10"
+								>
+									{#if item.imageUrl && !brokenImages[item.imageUrl]}
+										<img
+											src={item.imageUrl}
+											alt={item.title}
+											class="max-h-full max-w-full object-contain"
+											loading="lazy"
+											referrerpolicy="no-referrer"
+											onerror={() => (brokenImages = { ...brokenImages, [item.imageUrl]: true })}
+										/>
+									{:else}
+										<span class="text-2xl" aria-hidden="true">🎁</span>
+									{/if}
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col justify-between">
+									<div>
+										{#if item.store}
+											<p class="text-[11px] font-bold tracking-wider text-ink-soft uppercase">
+												{item.store}
+											</p>
+										{/if}
+										<p class="line-clamp-2 text-sm leading-snug font-semibold text-ink">
+											{item.title}
+										</p>
+										{#if item.price}
+											<p class="mt-0.5 text-sm font-bold text-pine tabular-nums">
+												{item.price}
+											</p>
+										{/if}
+										{#if item.note}
+											<p class="mt-1 text-xs text-ink-soft">{item.note}</p>
+										{/if}
+									</div>
+									<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+										{#if item.productUrl}
+											<a
+												href={item.productUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-xs font-semibold text-pine underline underline-offset-2"
+											>
+												{m.wishlist_view_item()} ↗
+											</a>
+										{:else}
+											<span></span>
+										{/if}
+										{#if !data.party.archivedAt}
+											<form method="POST" action="?/removeWishlistItem" use:enhance={keep}>
+												<input type="hidden" name="id" value={item.id} />
+												<button type="submit" class="btn-ghost btn-sm text-berry">
+													{m.remove()}
+												</button>
+											</form>
+										{/if}
+									</div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{@render feedback('wishlist')}
+
+				<WishlistPicker
+					archived={!!data.party.archivedAt}
+					existingItems={data.wishlistItems}
+				/>
+			</div>
+		{/if}
 	</section>
 
 	<div class="space-y-6">
