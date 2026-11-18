@@ -7,6 +7,7 @@ import {
 	loginMember,
 	setLocaleCookie
 } from './auth.ts';
+import { markMemberLinkOpened } from './members.ts';
 import { getMemberByMagicToken, getParty, runDraw } from './party.ts';
 import type { Member, Party } from './db/schema.ts';
 
@@ -29,6 +30,7 @@ export function partyContext(event: RequestEvent): PartyContext {
 			if (hit && hit.party.magicLinksEnabled) {
 				event.setHeaders({ 'cache-control': 'no-store' });
 				loginMember(event.cookies, hit.member);
+				markMemberLinkOpened(hit.member.id);
 				if (hit.member.locale && (locales as readonly string[]).includes(hit.member.locale)) {
 					setLocaleCookie(event.cookies, hit.member.locale);
 				}
@@ -96,7 +98,8 @@ export function adminMember(m: Member) {
 		wishlist: m.wishlist,
 		phone: m.phone,
 		magicToken: m.magicToken,
-		locale: m.locale
+		locale: m.locale,
+		linkOpenedAt: m.linkOpenedAt
 	};
 }
 

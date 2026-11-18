@@ -96,6 +96,13 @@ export function setMemberLocale(memberId: string, locale: string | null) {
 		.run();
 }
 
+export function markMemberLinkOpened(memberId: string) {
+	db.update(schema.members)
+		.set({ linkOpenedAt: new Date() })
+		.where(eq(schema.members.id, memberId))
+		.run();
+}
+
 export function generateMemberMagicToken(memberId: string, revokeExistingSessions = true): string {
 	const existing = db
 		.select({ magicToken: schema.members.magicToken })
@@ -103,7 +110,10 @@ export function generateMemberMagicToken(memberId: string, revokeExistingSession
 		.where(eq(schema.members.id, memberId))
 		.get();
 	const token = newMagicToken();
-	db.update(schema.members).set({ magicToken: token }).where(eq(schema.members.id, memberId)).run();
+	db.update(schema.members)
+		.set({ magicToken: token, linkOpenedAt: null })
+		.where(eq(schema.members.id, memberId))
+		.run();
 	if (revokeExistingSessions && existing?.magicToken) {
 		revokeMemberSessions(memberId);
 	}
@@ -129,7 +139,10 @@ export function generateMissingMagicTokens(partyId: string): number {
 }
 
 export function revokeMemberMagicToken(memberId: string) {
-	db.update(schema.members).set({ magicToken: null }).where(eq(schema.members.id, memberId)).run();
+	db.update(schema.members)
+		.set({ magicToken: null, linkOpenedAt: null })
+		.where(eq(schema.members.id, memberId))
+		.run();
 	revokeMemberSessions(memberId);
 }
 

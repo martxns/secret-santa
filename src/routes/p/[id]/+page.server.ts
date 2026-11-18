@@ -1,6 +1,13 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { grantCodeAccess, isRateLimited, logoutMember, recordFailure } from '#lib/server/auth.ts';
-import { getAssignment, getMembers, getParty, getRules } from '#lib/server/party.ts';
+import {
+	getAssignment,
+	getMemberRevealAt,
+	getMembers,
+	getParty,
+	getRules,
+	markAssignmentRevealed
+} from '#lib/server/party.ts';
 import { formString, partyContext, publicMember } from '#lib/server/guards.ts';
 import { normalizeCode } from '#lib/server/ids.ts';
 import { subscribedEndpoints } from '#lib/server/push.ts';
@@ -8,13 +15,22 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = (event) => {
 	const { party, me, access } = partyContext(event);
-	if (!access) return { rules: [], members: [], assignment: null, hasWishlist: false };
+	if (!access)
+		return {
+			rules: [],
+			members: [],
+			assignment: null,
+			assignmentRevealed: false,
+			hasWishlist: false
+		};
 
 	const receiver = me && party.drawnAt ? getAssignment(party.id, me.id) : null;
+	const revealedAt = me && party.drawnAt ? getMemberRevealAt(party.id, me.id) : null;
 	return {
 		rules: getRules(party.id),
 		members: getMembers(party.id).map(publicMember),
 		assignment: receiver ? { ...publicMember(receiver), wishlist: receiver.wishlist } : null,
+		assignmentRevealed: !!revealedAt,
 		hasWishlist: !!me?.wishlist.trim(),
 		created: event.url.searchParams.has('created'),
 		pushOn: me ? subscribedEndpoints(me.id).length > 0 : false
@@ -33,6 +49,13 @@ export const actions: Actions = {
 		}
 		grantCodeAccess(event.cookies, party);
 		redirect(303, `/p/${party.id}`);
+	},
+	reveal: (event) => {
+		const { party, me } = partyContext(event);
+		if (!me) return fail(401, { error: 'forbidden' });
+		if (!party.drawnAt) return fail(400, { error: 'invalid' });
+		markAssignmentRevealed(party.id, me.id);
+		return { revealed: true };
 	},
 	logout: ({ cookies, params }) => {
 		logoutMember(cookies, params.id);

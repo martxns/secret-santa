@@ -79,7 +79,7 @@
 		{/if}
 
 		{#if data.assignment}
-			<RevealCard receiver={data.assignment} />
+			<RevealCard receiver={data.assignment} alreadyRevealed={data.assignmentRevealed} />
 		{:else if data.me && party.drawnAt && data.me.participates}
 			<p class="error">{m.no_assignment()}</p>
 		{/if}

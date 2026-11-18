@@ -52,6 +52,7 @@ export const members = sqliteTable(
 		phone: text('phone').notNull().default(''),
 		magicToken: text('magic_token').unique(),
 		locale: text('locale'),
+		linkOpenedAt: ts('link_opened_at'),
 		createdAt: ts('created_at')
 			.notNull()
 			.$defaultFn(() => new Date())
@@ -93,7 +94,8 @@ export const assignments = sqliteTable(
 			.references(() => members.id, { onDelete: 'cascade' }),
 		receiverId: text('receiver_id')
 			.notNull()
-			.references(() => members.id, { onDelete: 'cascade' })
+			.references(() => members.id, { onDelete: 'cascade' }),
+		revealedAt: ts('revealed_at')
 	},
 	(t) => [primaryKey({ columns: [t.partyId, t.giverId] })]
 );

@@ -5,8 +5,10 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale, locales, type Locale } from '#lib/paraglide/runtime.js';
 	import { LANGUAGES } from '#lib/languages.ts';
+	import { TIMEZONE } from '$app/env/public';
 	import { errorText } from '#lib/errors.ts';
 	import { displayName, fullName } from '#lib/names.ts';
+	import { formatDateTime } from '#lib/time.ts';
 	import { buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import CopyButton from '#lib/components/CopyButton.svelte';
@@ -64,6 +66,33 @@
 			<div>
 				<p class="eyebrow">{m.edit_member()}</p>
 				<h1 class="text-3xl font-black text-pine">{fullName(member)}</h1>
+				{#if member.linkOpenedAt || (member.magicToken && data.magicLinksEnabled) || (data.party.drawnAt && member.participates)}
+					<p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+						{#if member.linkOpenedAt}
+							<span class="font-medium text-pine">
+								✓ {m.duty_link_opened()} · <span class="tabular-nums"
+									>{formatDateTime(member.linkOpenedAt, getLocale(), TIMEZONE)}</span
+								>
+							</span>
+						{:else if member.magicToken && data.magicLinksEnabled}
+							<span class="font-medium text-berry">⏳ {m.duty_link_not_opened()}</span>
+						{/if}
+						{#if (member.linkOpenedAt || (member.magicToken && data.magicLinksEnabled)) && data.party.drawnAt && member.participates}
+							<span class="text-ink-soft" aria-hidden="true">·</span>
+						{/if}
+						{#if data.party.drawnAt && member.participates}
+							{#if member.revealedAt}
+								<span class="font-medium text-pine">
+									🎁 {m.duty_match_revealed()} · <span class="tabular-nums"
+										>{formatDateTime(member.revealedAt, getLocale(), TIMEZONE)}</span
+									>
+								</span>
+							{:else}
+								<span class="font-medium text-berry">🙈 {m.duty_match_not_revealed()}</span>
+							{/if}
+						{/if}
+					</p>
+				{/if}
 			</div>
 		</div>
 

@@ -1,12 +1,18 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
 	import { displayName, fullName, type NamedMember } from '#lib/names.ts';
 	import Avatar from './Avatar.svelte';
 
 	let {
-		receiver
-	}: { receiver: NamedMember & { id: string; avatar: string | null; wishlist: string } } = $props();
+		receiver,
+		alreadyRevealed = false
+	}: {
+		receiver: NamedMember & { id: string; avatar: string | null; wishlist: string };
+		alreadyRevealed?: boolean;
+	} = $props();
 	let open = $state(false);
+	let reported = $state(false);
 </script>
 
 <section
@@ -29,12 +35,28 @@
 			<p class="rounded-full bg-ribbon-2/90 px-4 py-1 font-display text-2xl font-bold">
 				{m.reveal_title()}
 			</p>
-			<button
-				class="btn rounded-full bg-cream text-ribbon shadow-[0_3px_0_#e9c36a] hover:bg-[#f7f0e3]"
-				onclick={() => (open = true)}
+			<form
+				method="POST"
+				action="?/reveal"
+				use:enhance={({ cancel }) => {
+					open = true;
+					if (reported || alreadyRevealed) {
+						cancel();
+						return;
+					}
+					reported = true;
+					return async ({ result }) => {
+						if (result.type !== 'success') reported = false;
+					};
+				}}
 			>
-				✨ {m.reveal_open()}
-			</button>
+				<button
+					type="submit"
+					class="btn rounded-full bg-cream text-ribbon shadow-[0_3px_0_#e9c36a] hover:bg-[#f7f0e3]"
+				>
+					✨ {m.reveal_open()}
+				</button>
+			</form>
 			<p class="max-w-xs rounded-xl bg-ribbon-2/80 px-3 py-1 text-xs text-cream/90">
 				{m.reveal_hint()}
 			</p>

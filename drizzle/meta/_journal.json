@@ -29,6 +29,13 @@
       "when": 1795006058061,
       "tag": "0003_member_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795012678284,
+      "tag": "0004_member_duty_tracking",
+      "breakpoints": true
     }
   ]
 }

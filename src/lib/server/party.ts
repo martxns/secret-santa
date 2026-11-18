@@ -168,6 +168,38 @@ export function getAssignment(partyId: string, giverId: string) {
 	return db.select().from(schema.members).where(eq(schema.members.id, a.receiverId)).get() ?? null;
 }
 
+export function markAssignmentRevealed(partyId: string, giverId: string) {
+	db.update(schema.assignments)
+		.set({ revealedAt: new Date() })
+		.where(
+			and(
+				eq(schema.assignments.partyId, partyId),
+				eq(schema.assignments.giverId, giverId),
+				isNull(schema.assignments.revealedAt)
+			)
+		)
+		.run();
+}
+
+export function getMemberRevealAt(partyId: string, giverId: string): Date | null {
+	const row = db
+		.select({ revealedAt: schema.assignments.revealedAt })
+		.from(schema.assignments)
+		.where(and(eq(schema.assignments.partyId, partyId), eq(schema.assignments.giverId, giverId)))
+		.get();
+	return row?.revealedAt ?? null;
+}
+
+/** Map of giverId -> revealedAt for party admins. Never reads or exposes receiverId. */
+export function getRevealTimes(partyId: string): Map<string, Date | null> {
+	const rows = db
+		.select({ giverId: schema.assignments.giverId, revealedAt: schema.assignments.revealedAt })
+		.from(schema.assignments)
+		.where(eq(schema.assignments.partyId, partyId))
+		.all();
+	return new Map(rows.map((r) => [r.giverId, r.revealedAt ?? null]));
+}
+
 export function removeAvatarFile(avatar: string | null) {
 	if (!avatar || !/^[a-z0-9-]+\.webp$/.test(avatar)) return;
 	rmSync(join(uploadsDir(), avatar), { force: true });

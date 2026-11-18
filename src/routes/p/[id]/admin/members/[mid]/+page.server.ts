@@ -13,7 +13,7 @@ import {
 	validateNames,
 	validatePasscode
 } from '#lib/server/members.ts';
-import { deleteMember, getMembers, touchDraw } from '#lib/server/party.ts';
+import { deleteMember, getMemberRevealAt, getMembers, touchDraw } from '#lib/server/party.ts';
 import { normalizePhone } from '#lib/contacts.ts';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -33,7 +33,10 @@ function target(event: RequestEvent) {
 export const load: PageServerLoad = (event) => {
 	const { party, member } = target(event);
 	return {
-		member: adminMember(member),
+		member: {
+			...adminMember(member),
+			revealedAt: party.drawnAt ? getMemberRevealAt(party.id, member.id) : null
+		},
 		magicLinksEnabled: party.magicLinksEnabled,
 		smsTemplate: party.smsTemplate
 	};

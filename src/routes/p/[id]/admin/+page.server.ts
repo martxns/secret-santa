@@ -17,6 +17,7 @@ import {
 	deleteParty,
 	getExclusions,
 	getMembers,
+	getRevealTimes,
 	getRules,
 	replaceRules,
 	resetDraw,
@@ -49,6 +50,7 @@ export const load: PageServerLoad = (event) => {
 	const members = getMembers(party.id);
 	const byId = new Map(members.map((x) => [x.id, publicMember(x)]));
 	const pushEnabledIds = pushEnabledMemberIds(members.map((x) => x.id));
+	const revealTimes = party.drawnAt ? getRevealTimes(party.id) : new Map<string, Date | null>();
 	return {
 		admin: {
 			code: party.code,
@@ -58,7 +60,10 @@ export const load: PageServerLoad = (event) => {
 			pushEnabledIds
 		},
 		rules: getRules(party.id),
-		members: members.map(adminMember),
+		members: members.map((x) => ({
+			...adminMember(x),
+			revealedAt: revealTimes.get(x.id) ?? null
+		})),
 		exclusions: getExclusions(party.id)
 			.filter((e) => e.status !== 'declined')
 			.map((e) => ({
@@ -276,18 +281,27 @@ export const actions: Actions = {
 		const customMessage = formString(data, 'message', 500);
 
 		const isKnownPreset =
-			preset === 'wishlist_reminder' || preset === 'wishlist_new' || preset === 'event_reminder';
+			preset === 'wishlist_reminder' ||
+			preset === 'wishlist_new' ||
+			preset === 'event_reminder' ||
+			preset === 'reveal_reminder';
 		if (!isKnownPreset && !customMessage) return bad('updates', 'invalid');
 
 		const allMembers = getMembers(party.id);
+		const revealTimes = party.drawnAt ? getRevealTimes(party.id) : new Map<string, Date | null>();
 		const targets =
-			audience === 'no_wishlist' ? allMembers.filter((mem) => !mem.wishlist.trim()) : allMembers;
+			audience === 'no_wishlist'
+				? allMembers.filter((mem) => !mem.wishlist.trim())
+				: audience === 'link_unopened'
+					? allMembers.filter((mem) => !!mem.magicToken && !mem.linkOpenedAt)
+					: audience === 'not_revealed'
+						? allMembers.filter((mem) => mem.participates && !revealTimes.get(mem.id))
+						: allMembers;
 		const targetIds = targets.map((mem) => mem.id);
 		const memberLocaleMap = new Map(targets.map((mem) => [mem.id, mem.locale]));
 		const subscribedMembers = pushEnabledMemberIds(targetIds);
 
-		const targetUrl =
-			preset === 'wishlist_reminder' ? `/p/${party.id}/me` : `/p/${party.id}`;
+		const targetUrl = preset === 'wishlist_reminder' ? `/p/${party.id}/me` : `/p/${party.id}`;
 
 		const sentDevices = await notifyMembers(targetIds, (subLocale, memberId) => {
 			if (customMessage) {
@@ -313,6 +327,14 @@ export const actions: Actions = {
 					body: m.updates_push_wishlist_new_body({}, { locale: loc }),
 					url: targetUrl,
 					tag: `wishlist-new-${party.id}`
+				};
+			}
+			if (preset === 'reveal_reminder') {
+				return {
+					title: m.updates_push_reveal_reminder_title({ party: party.name }, { locale: loc }),
+					body: m.updates_push_reveal_reminder_body({}, { locale: loc }),
+					url: targetUrl,
+					tag: `reveal-rem-${party.id}`
 				};
 			}
 			return {

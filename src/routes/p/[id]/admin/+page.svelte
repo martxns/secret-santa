@@ -8,7 +8,7 @@
 	import { TIMEZONE } from '$app/env/public';
 	import { errorText } from '#lib/errors.ts';
 	import { displayName, fullName } from '#lib/names.ts';
-	import { formatDateTime, toInputValue } from '#lib/time.ts';
+	import { formatDateTime, formatShortDateTime, toInputValue } from '#lib/time.ts';
 	import { CURRENCIES } from '#lib/currencies.ts';
 	import { buildGroupSmsHref, buildSmsHref, renderSmsMessage } from '#lib/contacts.ts';
 	import CopyButton from '#lib/components/CopyButton.svelte';
@@ -36,8 +36,13 @@
 		smsTemplateDraft = data.admin.smsTemplate;
 	});
 
-	type UpdatePreset = 'wishlist_reminder' | 'wishlist_new' | 'event_reminder' | 'custom';
-	let updateAudience = $state<'all' | 'no_wishlist'>('all');
+	type UpdatePreset =
+		| 'wishlist_reminder'
+		| 'wishlist_new'
+		| 'event_reminder'
+		| 'reveal_reminder'
+		| 'custom';
+	let updateAudience = $state<'all' | 'no_wishlist' | 'link_unopened' | 'not_revealed'>('all');
 	let updatePreset = $state<UpdatePreset>('wishlist_reminder');
 	function presetTemplateFor(preset: UpdatePreset, loc: Locale): string {
 		if (preset === 'wishlist_reminder') {
@@ -48,6 +53,12 @@
 		}
 		if (preset === 'event_reminder') {
 			return m.updates_tpl_event_reminder({ party: '{party}', link: '{link}' }, { locale: loc });
+		}
+		if (preset === 'reveal_reminder') {
+			return m.updates_tpl_reveal_reminder(
+				{ name: '{name}', party: '{party}', link: '{link}' },
+				{ locale: loc }
+			);
 		}
 		return '';
 	}
@@ -81,15 +92,40 @@
 					}
 				: null;
 
-	const participants = $derived(data.members.filter((x) => x.participates).length);
+	const participatingMembers = $derived(data.members.filter((x) => x.participates));
+	const participants = $derived(participatingMembers.length);
+	const revealedCount = $derived(participatingMembers.filter((x) => !!x.revealedAt).length);
+	const unrevealedCount = $derived(participatingMembers.filter((x) => !x.revealedAt).length);
+	const membersWithLink = $derived(data.members.filter((x) => !!x.magicToken || !!x.linkOpenedAt));
+	const openedLinksCount = $derived(membersWithLink.filter((x) => !!x.linkOpenedAt).length);
+	const unopenedLinksCount = $derived(
+		data.members.filter((x) => !!x.magicToken && !x.linkOpenedAt).length
+	);
 	const missingLinks = $derived(data.members.some((x) => !x.magicToken));
 	const pushEnabledCount = $derived(data.admin.pushEnabledIds.length);
 	const pushEnabledSet = $derived(new Set(data.admin.pushEnabledIds));
 
+	let memberFilter = $state<'all' | 'unopened' | 'unrevealed'>('all');
+	$effect(() => {
+		if (memberFilter === 'unrevealed' && !party.drawnAt) memberFilter = 'all';
+		if (memberFilter === 'unopened' && !data.admin.magicLinksEnabled) memberFilter = 'all';
+	});
+	const visibleMembers = $derived(
+		memberFilter === 'unopened'
+			? data.members.filter((x) => !!x.magicToken && !x.linkOpenedAt)
+			: memberFilter === 'unrevealed'
+				? data.members.filter((x) => x.participates && !x.revealedAt)
+				: data.members
+	);
+
 	const updateTargets = $derived(
 		updateAudience === 'no_wishlist'
 			? data.members.filter((x) => !x.wishlist.trim())
-			: data.members
+			: updateAudience === 'link_unopened'
+				? data.members.filter((x) => !!x.magicToken && !x.linkOpenedAt)
+				: updateAudience === 'not_revealed'
+					? data.members.filter((x) => x.participates && !x.revealedAt)
+					: data.members
 	);
 	const updateTargetsWithPhone = $derived(updateTargets.filter((x) => !!x.phone.trim()));
 	const updateUsingPreset = $derived(
@@ -230,8 +266,23 @@
 						{m.draw_not_scheduled()}
 					{/if}
 				</p>
-				<p class="mt-1 text-sm text-ink-soft">
-					{m.draw_participants({ count: String(participants) })}
+				<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft">
+					<span class="tabular-nums">{m.draw_participants({ count: String(participants) })}</span>
+					{#if party.drawnAt && participants > 0}
+						<span aria-hidden="true">·</span>
+						{#if revealedCount === participants}
+							<span class="font-semibold text-pine tabular-nums">
+								✓ {m.duty_all_revealed()} ({revealedCount}/{participants})
+							</span>
+						{:else}
+							<span class="tabular-nums">
+								🎁 {m.duty_revealed_summary({
+									revealed: String(revealedCount),
+									total: String(participants)
+								})}
+							</span>
+						{/if}
+					{/if}
 				</p>
 			</div>
 			<div class="flex flex-wrap gap-2">
@@ -371,14 +422,83 @@
 	<!-- members -->
 	<section class="card lg:col-span-2">
 		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h2 class="text-2xl font-bold text-pine">
-				👥 {m.members_title({ count: String(data.members.length) })}
-			</h2>
-			{#if data.admin.magicLinksEnabled && missingLinks && data.members.length}
-				<form method="POST" action="?/generateAllLinks" use:enhance={keep}>
-					<button class="btn-pine btn-sm">🔗 {m.magic_link_generate_all()}</button>
-				</form>
-			{/if}
+			<div>
+				<h2 class="text-2xl font-bold text-pine">
+					👥 {m.members_title({ count: String(data.members.length) })}
+				</h2>
+				{#if membersWithLink.length || (party.drawnAt && participants)}
+					<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-soft tabular-nums">
+						{#if membersWithLink.length}
+							<span>
+								{m.duty_links_summary({
+									opened: String(openedLinksCount),
+									total: String(membersWithLink.length)
+								})}
+							</span>
+						{/if}
+						{#if membersWithLink.length && party.drawnAt && participants}
+							<span aria-hidden="true">·</span>
+						{/if}
+						{#if party.drawnAt && participants}
+							<span class={revealedCount === participants ? 'font-semibold text-pine' : ''}>
+								{m.duty_revealed_summary({
+									revealed: String(revealedCount),
+									total: String(participants)
+								})}
+							</span>
+						{/if}
+					</p>
+				{/if}
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				{#if (data.admin.magicLinksEnabled && membersWithLink.length) || (party.drawnAt && participants)}
+					<div
+						class="flex items-center gap-1 rounded-xl bg-paper-2/70 p-1 text-xs"
+						role="group"
+						aria-label={m.members_title({ count: String(data.members.length) })}
+					>
+						<button
+							type="button"
+							class="rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap transition {memberFilter ===
+							'all'
+								? 'bg-snow text-ink shadow-sm'
+								: 'text-ink-soft hover:text-ink'}"
+							onclick={() => (memberFilter = 'all')}
+						>
+							{m.duty_filter_all()} (<span class="tabular-nums">{data.members.length}</span>)
+						</button>
+						{#if data.admin.magicLinksEnabled && membersWithLink.length}
+							<button
+								type="button"
+								class="rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap transition {memberFilter ===
+								'unopened'
+									? 'bg-snow text-ink shadow-sm'
+									: 'text-ink-soft hover:text-ink'}"
+								onclick={() => (memberFilter = 'unopened')}
+							>
+								{m.duty_filter_unopened()} (<span class="tabular-nums">{unopenedLinksCount}</span>)
+							</button>
+						{/if}
+						{#if party.drawnAt && participants}
+							<button
+								type="button"
+								class="rounded-lg px-2.5 py-1 font-semibold whitespace-nowrap transition {memberFilter ===
+								'unrevealed'
+									? 'bg-snow text-ink shadow-sm'
+									: 'text-ink-soft hover:text-ink'}"
+								onclick={() => (memberFilter = 'unrevealed')}
+							>
+								{m.duty_filter_unrevealed()} (<span class="tabular-nums">{unrevealedCount}</span>)
+							</button>
+						{/if}
+					</div>
+				{/if}
+				{#if data.admin.magicLinksEnabled && missingLinks && data.members.length}
+					<form method="POST" action="?/generateAllLinks" use:enhance={keep}>
+						<button class="btn-pine btn-sm">🔗 {m.magic_link_generate_all()}</button>
+					</form>
+				{/if}
+			</div>
 		</div>
 		{#if data.admin.magicLinksEnabled}
 			<p class="mt-2 text-xs text-ink-soft">🔒 {m.magic_link_private_note()}</p>
@@ -386,14 +506,14 @@
 			<p class="mt-2 text-xs text-ink-soft">{m.magic_links_disabled_note()}</p>
 		{/if}
 		<ul class="mt-4 divide-y divide-ink/10">
-			{#each data.members as member (member.id)}
+			{#each visibleMembers as member (member.id)}
 				<li class="space-y-3 py-4">
-					<div class="grid gap-3 sm:grid-cols-[minmax(0,14rem)_1fr_auto] sm:items-start">
+					<div class="grid gap-3 sm:grid-cols-[minmax(0,18rem)_1fr_auto] sm:items-start">
 						<div class="flex items-center gap-3">
 							<Avatar {member} size={44} />
 							<div class="min-w-0">
 								<p class="truncate font-semibold">{fullName(member)}</p>
-								<p class="flex flex-wrap gap-1.5 text-xs text-ink-soft">
+								<p class="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-ink-soft">
 									{#if member.isAdmin}<span>👑 {m.party_admin()}</span>{/if}
 									{#if !member.participates}<span>{m.spectator()}</span>{/if}
 									{#if !member.hasPasscode}<span class="text-berry">🔓 {m.no_passcode_short()}</span
@@ -404,6 +524,47 @@
 									{/if}
 									{#if pushEnabledSet.has(member.id)}<span>🔔</span>{/if}
 								</p>
+								{#if member.linkOpenedAt || (member.magicToken && data.admin.magicLinksEnabled) || (party.drawnAt && member.participates)}
+									<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+										{#if member.linkOpenedAt}
+											<span
+												class="font-medium text-pine"
+												title={formatDateTime(member.linkOpenedAt, getLocale(), TIMEZONE)}
+											>
+												✓ {m.duty_link_opened()} · <span class="tabular-nums"
+													>{formatShortDateTime(
+														member.linkOpenedAt,
+														getLocale(),
+														TIMEZONE
+													)}</span
+												>
+											</span>
+										{:else if member.magicToken && data.admin.magicLinksEnabled}
+											<span class="font-medium text-berry">⏳ {m.duty_link_not_opened()}</span>
+										{/if}
+										{#if (member.linkOpenedAt || (member.magicToken && data.admin.magicLinksEnabled)) && party.drawnAt && member.participates}
+											<span class="text-ink-soft" aria-hidden="true">·</span>
+										{/if}
+										{#if party.drawnAt && member.participates}
+											{#if member.revealedAt}
+												<span
+													class="font-medium text-pine"
+													title={formatDateTime(member.revealedAt, getLocale(), TIMEZONE)}
+												>
+													🎁 {m.duty_match_revealed()} · <span class="tabular-nums"
+														>{formatShortDateTime(
+															member.revealedAt,
+															getLocale(),
+															TIMEZONE
+														)}</span
+													>
+												</span>
+											{:else}
+												<span class="font-medium text-berry">🙈 {m.duty_match_not_revealed()}</span>
+											{/if}
+										{/if}
+									</p>
+								{/if}
 							</div>
 						</div>
 						<Obscured text={member.wishlist} />
@@ -477,6 +638,8 @@
 						</div>
 					{/if}
 				</li>
+			{:else}
+				<li class="py-4 text-sm font-medium text-pine">✓ {m.duty_filter_empty()}</li>
 			{/each}
 		</ul>
 
@@ -613,6 +776,16 @@
 							{m.updates_audience_no_wishlist()} ({data.members.filter((x) => !x.wishlist.trim())
 								.length})
 						</option>
+						{#if data.admin.magicLinksEnabled && membersWithLink.length}
+							<option value="link_unopened">
+								{m.updates_audience_link_unopened()} ({unopenedLinksCount})
+							</option>
+						{/if}
+						{#if party.drawnAt && participants}
+							<option value="not_revealed">
+								{m.updates_audience_not_revealed()} ({unrevealedCount})
+							</option>
+						{/if}
 					</select>
 				</div>
 				<div>
@@ -627,6 +800,9 @@
 						<option value="wishlist_reminder">{m.updates_preset_wishlist_reminder()}</option>
 						<option value="wishlist_new">{m.updates_preset_wishlist_new()}</option>
 						<option value="event_reminder">{m.updates_preset_event_reminder()}</option>
+						{#if party.drawnAt}
+							<option value="reveal_reminder">{m.updates_preset_reveal_reminder()}</option>
+						{/if}
 						<option value="custom">{m.updates_preset_custom()}</option>
 					</select>
 				</div>

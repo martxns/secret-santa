@@ -65,3 +65,18 @@ export function formatDate(date: Date | null | undefined, locale: string, tz: st
 		year: 'numeric'
 	}).format(date);
 }
+
+export function formatShortDateTime(
+	date: Date | null | undefined,
+	locale: string,
+	tz: string
+): string {
+	if (!date) return '';
+	return new Intl.DateTimeFormat(language(locale).intl, {
+		timeZone: tz,
+		day: 'numeric',
+		month: 'short',
+		hour: '2-digit',
+		minute: '2-digit'
+	}).format(date);
+}
